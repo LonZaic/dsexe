@@ -162,7 +162,6 @@ export const ai = {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + getToken(),
-          'x-api-key': getApiKey(),
         },
         body: JSON.stringify({ messages, model: model || 'deepseek-v4-flash' })
       })

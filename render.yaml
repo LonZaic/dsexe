@@ -1,0 +1,19 @@
+# ══════════════════════════════════════
+# Render Blueprint — one-click deploy
+# Web Service: Express backend + static frontend
+# ══════════════════════════════════════
+
+services:
+  - type: web
+    name: deepseek-super
+    env: node
+    region: singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: PORT
+        value: "3001"
+      - key: NODE_ENV
+        value: production

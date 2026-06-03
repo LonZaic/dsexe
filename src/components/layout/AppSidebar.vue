@@ -20,6 +20,15 @@
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 6.5L7.5 2 13 6.5V13H9.5v-3.5h-4V13H2V6.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
         {{ t('home') }}
       </button>
+      <button class="nav-item" :class="{ active: route.path === '/agent' }" @click="$router.push('/agent')">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7.5a2 2 0 114 0 2 2 0 01-4 0z" stroke="currentColor" stroke-width="1.3"/><path d="M9 9l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        {{ t('agentMode') }}
+      </button>
+      <button class="nav-item disabled">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 2h9a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M5 5l5 5M10 5l-5 5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+        Code
+        <span class="nav-badge">SOON</span>
+      </button>
       <button class="nav-item" @click="openSettings('api')">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 7.5h6M2 11h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="11.5" cy="10" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13.5 12l1 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         {{ t('apiKey') }}
@@ -156,6 +165,8 @@ onUnmounted(() => {
 .nav-item:hover { background: var(--bg3); color: var(--text); }
 .nav-item.active { background: var(--bg3); color: var(--text); }
 .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: auto; }
+.nav-item.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+.nav-badge { font-size: 9px; font-weight: 500; letter-spacing: .5px; padding: 1px 5px; border-radius: var(--radius-full); background: var(--accent-muted); color: var(--accent); margin-left: auto; }
 .recents-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 6px; font-size: 12px; color: var(--text3); letter-spacing: .04em; }
 .recents-list { flex: 1; overflow-y: auto; padding: 0 8px; }
 .recents-list::-webkit-scrollbar { width: 4px; }

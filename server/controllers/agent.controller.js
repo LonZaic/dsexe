@@ -2,16 +2,17 @@
 // Agent Controller
 // ══════════════════════════════════════
 
+const config = require('../config')
 const { runAgent, cleanWorkspace } = require('../engine/agent')
 const { broadcastAgentEvent, broadcastAgentResult } = require('../ws')
 const { sendSuccess, sendError } = require('../middleware/errorHandler')
 
 function run(req, res) {
   const { task, model } = req.body
-  const apiKey = req.headers['x-api-key']
+  const apiKey = config.deepseekApiKey || req.headers['x-api-key']
   const permissionMode = req.headers['x-permission-mode'] || 'default'
 
-  if (!apiKey) return sendError(res, '缺少 API Key')
+  if (!apiKey) return sendError(res, '缺少 API Key，请在 .env 中设置 DEEPSEEK_API_KEY')
   if (!task) return sendError(res, '缺少任务描述')
 
   res.setHeader('Content-Type', 'text/event-stream')
@@ -52,10 +53,10 @@ function run(req, res) {
 
 function groupRun(req, res) {
   const { task, roomId, model } = req.body
-  const apiKey = req.headers['x-api-key']
+  const apiKey = config.deepseekApiKey || req.headers['x-api-key']
   const permissionMode = req.headers['x-permission-mode'] || 'default'
 
-  if (!apiKey) return sendError(res, '缺少 API Key')
+  if (!apiKey) return sendError(res, '缺少 API Key，请在 .env 中设置 DEEPSEEK_API_KEY')
   if (!task) return sendError(res, '缺少任务描述')
   if (!roomId) return sendError(res, '缺少房间 ID')
 
@@ -105,7 +106,7 @@ function groupRun(req, res) {
 
 async function judge(req, res) {
   const { task, context } = req.body
-  const apiKey = req.headers['x-api-key']
+  const apiKey = config.deepseekApiKey || req.headers['x-api-key']
 
   if (!apiKey || !task) return sendError(res, '缺少参数')
 

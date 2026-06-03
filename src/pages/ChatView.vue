@@ -388,7 +388,8 @@ async function send() {
 
     // Classify intent via function calling before deciding flow
     try {
-        const result = await classifyIntent(text, store.apikey)
+        const context = store.visibleMessages.slice(-4)
+        const result = await classifyIntent(text, store.apikey, context)
         if (result.intent === 'design') {
             inputText.value = ''
             const files = pendingFiles.value.map(f => ({
@@ -554,7 +555,6 @@ async function sendToAgent(task) {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + localStorage.getItem('bbot_token'),
-                'x-api-key': store.apikey,
                 'x-permission-mode': store.permissionMode || 'default',
             },
             body: JSON.stringify({ task, model: 'deepseek-v4-pro' }),
@@ -710,15 +710,15 @@ function buildMessages(tempId) {
 async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, deviceH = 667, abortCtrl = null) {
     // Force V4 Pro for design tasks — better quality, reasoning support
     const model = isDesign ? 'deepseek-v4-pro' : store.model
-    const body = { model, stream: true, messages: msgs }
+    const body = { model, messages: msgs }
     if (tools && tools.length) {
         body.tools = tools
         body.tool_choice = 'auto'
     }
 
-    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const res = await fetch('/api/ai/chat/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + store.apikey },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: (abortCtrl || {}).signal,
     })
@@ -1062,12 +1062,9 @@ async function generateTitle(userMsg, convId) {
     const fallback = (userMsg || '新对话').replace(/[\n\r]/g, ' ').slice(0, 15).trim() || '新对话'
     console.log('[Title] generating for:', convId, 'input:', (userMsg || '').slice(0, 30))
     try {
-        const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        const res = await fetch('/api/ai/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + store.apikey
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: store.model,
                 messages: [
@@ -1083,7 +1080,8 @@ async function generateTitle(userMsg, convId) {
             store.updateConvTitle(convId, fallback)
             return
         }
-        const data = await res.json()
+        const wrapper = await res.json()
+        const data = (wrapper && wrapper.success) ? (wrapper.data?.raw || wrapper) : wrapper
         const title = data.choices?.[0]?.message?.content?.trim().slice(0, 30)
         if (title) {
             console.log('[Title] got:', title)

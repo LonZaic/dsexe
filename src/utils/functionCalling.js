@@ -103,22 +103,29 @@ function getClassifyTool() {
 }
 
 // Call DeepSeek API to classify user intent (lightweight, non-streaming)
-async function classifyIntent(userText, apikey) {
+async function classifyIntent(userText, apikey, contextMsgs = []) {
+    // Build messages: system + recent context (max 4) + current user msg
+    const messages = [
+        { role: 'system', content: '分析用户意图。设计/创建网页UI→design。短词如"做""继续""开始"若上文是设计对话→design。普通对话→chat。' },
+    ]
+    const recent = contextMsgs.slice(-4)
+    for (const m of recent) {
+        messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: (m.text || '').slice(0, 100) })
+    }
+    messages.push({ role: 'user', content: userText })
+
     const body = {
         model: 'deepseek-chat',
         stream: false,
         max_tokens: 100,
-        messages: [
-            { role: 'system', content: '分析用户意图。用户要求设计/创建网页、UI、界面、组件、布局、页面 → intent=design。普通对话、问答、代码、闲聊 → intent=chat。' },
-            { role: 'user', content: userText },
-        ],
+        messages,
         tools: [getClassifyTool()],
         tool_choice: { type: 'function', function: { name: 'classify_intent' } },
     }
 
-    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apikey },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
     })
 
@@ -127,7 +134,8 @@ async function classifyIntent(userText, apikey) {
         throw new Error(err.error?.message || `HTTP ${res.status}`)
     }
 
-    const data = await res.json()
+    const wrapper = await res.json()
+    const data = (wrapper && typeof wrapper === 'object' && 'success' in wrapper) ? (wrapper.data?.raw || wrapper.data || wrapper) : wrapper
     const tc = data.choices?.[0]?.message?.tool_calls?.[0]
     if (!tc || tc.function?.name !== 'classify_intent') {
         throw new Error('Classification failed: no tool call')

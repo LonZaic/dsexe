@@ -1,15 +1,21 @@
 // ══════════════════════════════════════
 // AI Controller — DeepSeek API proxy
+// Uses DEEPSEEK_API_KEY from env as primary auth source
 // ══════════════════════════════════════
 
 const { sendSuccess, sendError } = require('../middleware/errorHandler')
 const { DEEPSEEK_API_BASE } = require('../config/constants')
+const config = require('../config')
+
+function getApiKey(req) {
+  return config.deepseekApiKey || req.headers['x-api-key'] || ''
+}
 
 async function chat(req, res) {
-  const { messages, model } = req.body
-  const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '')
+  const { messages, model, ...rest } = req.body
+  const apiKey = getApiKey(req)
 
-  if (!apiKey) return sendError(res, '缺少 API Key')
+  if (!apiKey) return sendError(res, '缺少 API Key，请在 .env 中设置 DEEPSEEK_API_KEY')
 
   try {
     const response = await fetch(DEEPSEEK_API_BASE, {
@@ -21,9 +27,11 @@ async function chat(req, res) {
       body: JSON.stringify({
         model: model || 'deepseek-v4-flash',
         messages,
-        max_tokens: 2000,
-        temperature: 0.7,
+        ...(rest.max_tokens ? { max_tokens: rest.max_tokens } : {}),
+        ...(rest.temperature != null ? { temperature: rest.temperature } : {}),
         stream: false,
+        ...(rest.tools ? { tools: rest.tools } : {}),
+        ...(rest.tool_choice ? { tool_choice: rest.tool_choice } : {}),
       }),
     })
     if (!response.ok) {
@@ -31,17 +39,17 @@ async function chat(req, res) {
       return sendError(res, 'AI API 错误', 'AI_API_ERROR', response.status, err)
     }
     const data = await response.json()
-    sendSuccess(res, { reply: data.choices?.[0]?.message?.content || '(无响应)' })
+    sendSuccess(res, { reply: data.choices?.[0]?.message?.content || '(无响应)', raw: data })
   } catch (e) {
     sendError(res, e.message, 'AI_API_ERROR', 500)
   }
 }
 
 async function chatStream(req, res) {
-  const { messages, model } = req.body
-  const apiKey = req.headers['x-api-key']
+  const { messages, model, ...rest } = req.body
+  const apiKey = getApiKey(req)
 
-  if (!apiKey) return sendError(res, '缺少 API Key')
+  if (!apiKey) return sendError(res, '缺少 API Key，请在 .env 中设置 DEEPSEEK_API_KEY')
 
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -57,9 +65,11 @@ async function chatStream(req, res) {
       body: JSON.stringify({
         model: model || 'deepseek-v4-flash',
         messages,
-        max_tokens: 2000,
-        temperature: 0.7,
+        ...(rest.max_tokens ? { max_tokens: rest.max_tokens } : {}),
+        ...(rest.temperature != null ? { temperature: rest.temperature } : {}),
         stream: true,
+        ...(rest.tools ? { tools: rest.tools } : {}),
+        ...(rest.tool_choice ? { tool_choice: rest.tool_choice } : {}),
       }),
     })
 

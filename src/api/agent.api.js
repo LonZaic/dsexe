@@ -16,7 +16,6 @@ export function runAgent(task, model, permissionMode = 'default', onEvent) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey || '',
       'x-permission-mode': permissionMode,
     },
     body: JSON.stringify({ task, model }),
@@ -63,7 +62,6 @@ export function runGroupAgent(task, roomId, model, permissionMode = 'default', o
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey || '',
       'x-permission-mode': permissionMode,
     },
     body: JSON.stringify({ task, roomId, model }),
@@ -124,7 +122,6 @@ export function aiChatStream(messages, model, onChunk, onDone) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey || '',
     },
     body: JSON.stringify({ messages, model }),
     signal: controller.signal,
