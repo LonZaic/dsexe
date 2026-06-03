@@ -58,4 +58,87 @@ function getEmailTools() {
     }
 }
 
-export { getEmailTools }
+// Design preview function — AI calls this when user wants visual design
+function getDesignTool() {
+    return {
+        type: 'function',
+        function: {
+            name: 'request_design_preview',
+            description: '当用户要求你设计或创建任何网页/UI界面时（无论简单还是复杂），必须立即调用此函数让用户选择目标设备。调用后请停止生成，等待用户选择设备。绝对不要直接输出HTML、CSS、JS代码。不要用"当然可以，我来帮你设计"这类话替代函数调用。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    summary: { type: 'string', description: '一句话描述你要设计什么，不超过20字' },
+                },
+                required: ['summary'],
+            },
+        },
+    }
+}
+
+// Classification tool — forces AI to classify every request as design or chat
+function getClassifyTool() {
+    return {
+        type: 'function',
+        function: {
+            name: 'classify_intent',
+            description: '判断用户意图：是要求设计/创建网页UI界面，还是普通对话。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    intent: {
+                        type: 'string',
+                        enum: ['design', 'chat'],
+                        description: 'design=用户要求设计网页/UI/界面/组件/布局/页面; chat=普通对话/问答/代码/闲聊'
+                    },
+                    summary: {
+                        type: 'string',
+                        description: '如果intent=design，简述设计内容(20字内)；否则留空'
+                    },
+                },
+                required: ['intent'],
+            },
+        },
+    }
+}
+
+// Call DeepSeek API to classify user intent (lightweight, non-streaming)
+async function classifyIntent(userText, apikey) {
+    const body = {
+        model: 'deepseek-chat',
+        stream: false,
+        max_tokens: 100,
+        messages: [
+            { role: 'system', content: '分析用户意图。用户要求设计/创建网页、UI、界面、组件、布局、页面 → intent=design。普通对话、问答、代码、闲聊 → intent=chat。' },
+            { role: 'user', content: userText },
+        ],
+        tools: [getClassifyTool()],
+        tool_choice: { type: 'function', function: { name: 'classify_intent' } },
+    }
+
+    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apikey },
+        body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error?.message || `HTTP ${res.status}`)
+    }
+
+    const data = await res.json()
+    const tc = data.choices?.[0]?.message?.tool_calls?.[0]
+    if (!tc || tc.function?.name !== 'classify_intent') {
+        throw new Error('Classification failed: no tool call')
+    }
+
+    let args = {}
+    try { args = JSON.parse(tc.function.arguments) } catch {}
+    return {
+        intent: args.intent || 'chat',
+        summary: args.summary || '',
+    }
+}
+
+export { getEmailTools, getDesignTool, classifyIntent }

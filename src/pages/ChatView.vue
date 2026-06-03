@@ -17,31 +17,23 @@
                         :agent-events="item._agentEvents || []"
                         :sibling-count="item.role === 'ai' ? store.siblingInfo(item.parent_id, item.id).count : 1"
                         :sibling-index="item.role === 'ai' ? store.siblingInfo(item.parent_id, item.id).index : 1"
+                        :device-picker="item._devicePicker || false"
+                        :design-summary="item._designSummary || ''"
                         @regenerate="regenerate"
                         @edit="onEditMessage(item)"
                         @delete="onDeleteMessage(item)"
                         @prev-branch="store.switchBranch(item.parent_id, 'prev')"
                         @next-branch="store.switchBranch(item.parent_id, 'next')"
+                        @pick-device="onPickDevice(item, $event)"
                     />
                 </template>
             </VirtualList>
-
-            <!-- Device selector bar -->
-            <div v-if="showDeviceBar" class="device-bar">
-                <span class="device-label">{{ t('selectDevice') }}</span>
-                <button
-                    v-for="d in DEVICES"
-                    :key="d.id"
-                    :class="['device-btn', { active: selectedDevice?.id === d.id }]"
-                    @click="pickDevice(d)"
-                >{{ d.name }}</button>
-            </div>
 
             <!-- Professional Input Bar -->
             <InputBar
                 ref="inputBarRef"
                 v-model="inputText"
-                :is-running="!!agentRunningMap[store.currentId]"
+                :is-running="!!agentRunningMap[store.currentId] || store.isLoadingFor(store.currentId)"
                 :files="pendingFiles"
                 :web-search="webSearchEnabled"
                 :thinking-depth="thinkingDepth"
@@ -82,8 +74,8 @@ import { useDebounce } from '../composables/useDebounce.js'
 import { saveFile, loadFile } from '../utils/fileDB.js'
 import { extractFileContent } from '../utils/extractFile.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
-import { getEmailTools } from '../utils/functionCalling.js'
-import { DEVICES, isDesignRequest, hasDeviceSpecified, buildDesignPrompt, parseDesignBlocks, cleanDesignMarkers, cleanDesignMarkersStreaming, hasOpenDesignBlock, guessDeviceType, extractFirstHtmlBlock, extractRawHtml } from '../utils/designPreview.js'
+import { getEmailTools, getDesignTool, classifyIntent } from '../utils/functionCalling.js'
+import { buildDesignPrompt, parseDesignBlocks, cleanDesignMarkers, cleanDesignMarkersStreaming, hasOpenDesignBlock, guessDeviceType, extractFirstHtmlBlock, extractRawHtml } from '../utils/designPreview.js'
 import { initEmailScheduler } from '../utils/email.js'
 import VirtualList from '../components/VirtualList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
@@ -103,25 +95,30 @@ const { debounced } = useDebounce(inputText, 400)
 const virtualListRef = ref(null)
 const textareaRef = ref(null)
 const fileInput = ref(null)
-const pendingFiles = ref([])
 const previewSrc = ref(null)
-let abortController = null
-const showDeviceBar = ref(false)
-const selectedDevice = ref(null)
-const pendingDesignText = ref('')
-const agentMode = ref(false)
 const agentPanelVisible = ref(false)
 const agentEvents = ref([])
 const agentPanelRef = ref(null)
 const inputBarRef = ref(null)
-// Code Panel state
 const codePanelVisible = ref(false)
 const codePanelTabs = ref([])
-// Input bar state
+const showModelMenu = ref(false)
+
+// ═══ Per-tab state — isolated via component :key on tab switch ═══
+const pendingFiles = ref([])
 const webSearchEnabled = ref(false)
 const thinkingDepth = ref('medium')
-const showModelMenu = ref(false)
-// Per-conversation agent state — each conversation runs independently!
+const agentMode = ref(false)
+const showDeviceBar = ref(false)
+const selectedDevice = ref(null)
+const pendingDesignText = ref('')
+
+function getAgentMode() { return agentMode.value }
+function getPendingDesignText() { return pendingDesignText.value }
+function setPendingDesignText(val) { pendingDesignText.value = val }
+function setShowDeviceBar(val) { showDeviceBar.value = val }
+
+// Persistent across tab switches (agent runs in background)
 const agentAbortMap = {}
 const agentRunningMap = {}
 const agentTimerMap = {}
@@ -199,7 +196,7 @@ watch(
         return msgs[msgs.length - 1].text
     },
     async () => {
-        if (!store.isLoading) return
+        if (!store.isLoadingFor(store.currentId)) return
         const atBottom = virtualListRef.value?.isAtBottom() ?? true
         if (!atBottom) return
         await nextTick()
@@ -264,10 +261,12 @@ async function onFiles(e) {
         const blob = new Blob([await readAsBuffer(f)], { type: f.type || 'application/octet-stream' })
         const dataUrl = cat === 'image' ? content : URL.createObjectURL(blob)
         await saveFile(key, blob)
-        pendingFiles.value.push({
+        const files = pendingFiles.value
+        files.push({
             name: f.name, type: f.type || guessType(f.name),
             size: f.size, key, data: dataUrl, content,
         })
+        pendingFiles.value = (files)
     }
     fileInput.value.value = ''
 }
@@ -315,9 +314,11 @@ function guessType(name) {
 }
 
 function removeFile(i) {
-    const f = pendingFiles.value[i]
+    const files = pendingFiles.value
+    const f = files[i]
     if (f?.data) URL.revokeObjectURL(f.data)
-    pendingFiles.value.splice(i, 1)
+    files.splice(i, 1)
+    pendingFiles.value = (files)
 }
 
 function previewFile(f) {
@@ -344,14 +345,14 @@ function pickDevice(d) {
         const parts = val.split(/[x×X,，\s]+/)
         const w = parseInt(parts[0]) || 800
         const h = parseInt(parts[1]) || 600
-        selectedDevice.value = { name: `自定义 (${w}x${h})`, w, h }
+        selectedDevice.value = ({ name: `自定义 (${w}x${h})`, w, h })
     } else {
-        selectedDevice.value = d
+        selectedDevice.value = (d)
     }
-    showDeviceBar.value = false
-    if (pendingDesignText.value) {
-        const text = pendingDesignText.value
-        pendingDesignText.value = ''
+    setShowDeviceBar(false)
+    if (getPendingDesignText()) {
+        const text = getPendingDesignText()
+        setPendingDesignText('')
         inputText.value = ''
         _doSend(text)
     }
@@ -367,7 +368,7 @@ async function send() {
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
 
     // Agent mode ON → always use agent
-    if (agentMode.value) {
+    if (getAgentMode()) {
         await sendToAgent(text)
         return
     }
@@ -385,12 +386,58 @@ async function send() {
         return
     }
 
-    if (isDesignRequest(text) && !hasDeviceSpecified(text) && !selectedDevice.value) {
-        pendingDesignText.value = text
-        showDeviceBar.value = true
-        return
+    // Classify intent via function calling before deciding flow
+    try {
+        const result = await classifyIntent(text, store.apikey)
+        if (result.intent === 'design') {
+            inputText.value = ''
+            const files = pendingFiles.value.map(f => ({
+                name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '',
+            }))
+            pendingFiles.value = ([])
+            showDesignPicker(text, result.summary, files)
+            return
+        }
+    } catch (e) {
+        console.warn('[classify] failed, fallback to normal chat:', e.message)
     }
+
     _doSend(text)
+}
+
+// Show device picker after AI confirms design intent
+function showDesignPicker(userText, summary, files = []) {
+    const convId = store.currentId
+    store.addUserMessage(userText, files)
+
+    // Directly push a device picker AI message (no DB, in-memory only)
+    const msgs = store.messagesMap[convId] || []
+    const userMsgs = msgs.filter(m => m.role === 'user')
+    const parentId = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].id : null
+    const pickerId = '_picker_' + Date.now()
+
+    const pickerMsg = {
+        role: 'ai',
+        text: summary || userText.slice(0, 30),
+        reasoning: '',
+        id: pickerId,
+        parent_id: parentId,
+        designs: [],
+        _devicePicker: true,
+        _designSummary: summary || userText.slice(0, 30),
+    }
+
+    msgs.push(pickerMsg)
+    store.messagesMap[convId] = [...msgs]
+
+    // Update branch state so visibleMessages includes the picker
+    if (parentId != null) {
+        const bs = store.branchStateMap[convId] || {}
+        bs[parentId] = pickerId
+        store.branchStateMap[convId] = { ...bs }
+    }
+
+    store.setLoading(false, convId)
 }
 
 // ─── InputBar integration handlers ───
@@ -456,7 +503,7 @@ async function sendToAgent(task) {
         if (textareaRef.value) textareaRef.value.style.height = 'auto'
         store.addUserMessage(task, [])
         const tempId = store.startStreamReply(convId)
-        store.setLoading(true)
+        store.setLoading(true, convId)
         try {
             const msgs = [{ role: 'system', content: '你是一个AI助手。简洁友好地回答用户问题。' }]
             const prev = store.visibleMessages.filter(m => m.id !== tempId).slice(-10)
@@ -467,13 +514,13 @@ async function sendToAgent(task) {
             const { ai } = await import('../api/index.js')
             await ai.chatStream(msgs, 'deepseek-v4-flash',
                 (full) => store.appendStreamText(tempId, full),
-                (full) => { store.updateStreamCleanText(tempId, full); store.finishStreamReply(tempId); store.setLoading(false) },
-                (err) => { store.updateStreamCleanText(tempId, 'Error: ' + err.message); store.finishStreamReply(tempId); store.setLoading(false) }
+                (full) => { store.updateStreamCleanText(tempId, full); store.finishStreamReply(tempId); store.setLoading(false, convId) },
+                (err) => { store.updateStreamCleanText(tempId, 'Error: ' + err.message); store.finishStreamReply(tempId); store.setLoading(false, convId) }
             )
         } catch (e) {
             store.updateStreamCleanText(tempId, 'Error: ' + e.message)
             store.finishStreamReply(tempId)
-            store.setLoading(false)
+            store.setLoading(false, convId)
         }
         return
     }
@@ -486,7 +533,7 @@ async function sendToAgent(task) {
     store.addUserMessage('[Agent] ' + task, [])
     inputText.value = ''
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
-    store.setLoading(true)
+    store.setLoading(true, convId)
 
     const tempId = store.startStreamReply(convId)
     agentEvents.value = []
@@ -556,7 +603,7 @@ async function sendToAgent(task) {
         store.updateStreamAgentEvents(tempId, collected)
     }
 
-    store.setLoading(false)
+    store.setLoading(false, convId)
 
     // Use streamed final output if available, otherwise fall back to logText
     const finalEvt = collected.find(e => e.type === 'done' || e.type === 'final')
@@ -586,8 +633,8 @@ async function _doSend(text) {
         name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '',
     }))
 
-    const isDesign = selectedDevice.value && isDesignRequest(text)
     const deviceInfo = selectedDevice.value
+    const isDesign = !!deviceInfo
     const finalText = isDesign ? buildDesignPrompt(text, deviceInfo) : text
 
     const displayText = isDesign
@@ -608,7 +655,7 @@ async function _doSend(text) {
     }
 
     inputText.value = ''
-    pendingFiles.value = []
+    pendingFiles.value = ([])
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
 
     await callStreamAPI(files, isDesign, isDesign, deviceInfo)
@@ -634,12 +681,12 @@ async function _doSend(text) {
         aiMsg.designProgress = 0
     }
 
-    selectedDevice.value = null
+    selectedDevice.value = (null)
 }
 
 function buildMessages(tempId) {
     const prevMsgs = store.visibleMessages.filter(m => m.id !== tempId)
-    const msgs = [{ role: 'system', content: '你是一个AI助手。用户上传文件时，文件名和内容会附在消息中。请基于文件内容回答。支持 Markdown 格式。' }]
+    const msgs = [{ role: 'system', content: '你是一个AI助手。当用户要求设计、创建或绘制网页/UI界面（页面、组件、登录页、仪表盘、导航栏、按钮、表单、布局等）时，你必须调用 request_design_preview 函数让用户选择设备，然后等用户选了再生成代码。禁止直接输出HTML/CSS。简单问答和代码逻辑正常回答即可。用户上传文件时，文件名和内容会附在消息中。支持 Markdown 格式。' }]
     for (const m of prevMsgs) {
         if (m.role === 'user') {
             let content = m._apiText || m.text || ''
@@ -660,7 +707,7 @@ function buildMessages(tempId) {
     return msgs
 }
 
-async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, deviceH = 667) {
+async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, deviceH = 667, abortCtrl = null) {
     // Force V4 Pro for design tasks — better quality, reasoning support
     const model = isDesign ? 'deepseek-v4-pro' : store.model
     const body = { model, stream: true, messages: msgs }
@@ -673,7 +720,7 @@ async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, de
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + store.apikey },
         body: JSON.stringify(body),
-        signal: abortController.signal,
+        signal: (abortCtrl || {}).signal,
     })
 
     if (!res.ok) {
@@ -780,10 +827,11 @@ async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, de
 }
 
 async function callStreamAPI(files = [], skipEmail = false, isDesign = false, device = null) {
-    store.setLoading(true)
+    const convId = store.currentId
+    store.setLoading(true, convId)
     const tempId = store.startStreamReply()
-    abortController = new AbortController()
-    store.setAbortController(abortController)
+    const abortCtrl = new AbortController()
+    store.setAbortController(abortCtrl, convId)
 
     if (isDesign) {
         store.updateStreamCleanText(tempId, '思考中...')
@@ -793,27 +841,60 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
     try {
         const msgs = buildMessages(tempId)
         const { tools, executors } = skipEmail ? { tools: [], executors: {} } : getEmailTools()
+        // Always include design detection function
+        const designTool = getDesignTool()
+        const allTools = [...tools, designTool]
 
         const dw = device?.w || 375
         const dh = device?.h || 667
-        const first = await doStream(msgs, tempId, tools, isDesign, dw, dh)
+        const first = await doStream(msgs, tempId, allTools, isDesign, dw, dh, abortCtrl)
         let finalText = first.text
 
-        if (first.toolCalls.length > 0 && tools.length > 0) {
-            const tc = first.toolCalls[0]
+        // Check if AI called the design function → show device picker
+        const designCall = first.toolCalls.find(tc => tc.function?.name === 'request_design_preview')
+        if (designCall) {
             let args = {}
-            try { args = JSON.parse(tc.function.arguments) } catch {}
+            try { args = JSON.parse(designCall.function.arguments) } catch {}
+            const summary = args.summary || ''
+            // Replace stream message with device picker
+            store.updateStreamCleanText(tempId, '')
+            store.updateStreamDesign(tempId, [])
+            store.updateStreamRawText(tempId, '')
+            store.updateStreamAgentEvents(tempId, [])
+            store.finishStreamReply(tempId)
+            store.setLoading(false, convId)
+            // Mark last AI message as device picker
+            const realId = store._lastFinishedId
+            if (realId) {
+                const msgs = store.messagesMap[convId] || []
+                const msg = msgs.find(m => m.id === realId)
+                if (msg) {
+                    msg._devicePicker = true
+                    msg._designSummary = summary
+                    msg.text = summary
+                }
+            }
+            return
+        }
 
-            const executor = executors[tc.function.name]
-            if (executor) {
-                const result = await executor(args)
-                msgs.push({ role: 'assistant', content: first.text || null, tool_calls: [tc] })
-                msgs.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: result })
+        // Handle email tool calls
+        if (first.toolCalls.length > 0 && tools.length > 0) {
+            const tc = first.toolCalls.find(t => t.function?.name !== 'request_design_preview')
+            if (tc) {
+                let args = {}
+                try { args = JSON.parse(tc.function.arguments) } catch {}
 
-                store.appendStreamText(tempId, '')
-                store.appendStreamReasoning(tempId, first.reasoning)
-                const second = await doStream(msgs, tempId, [], isDesign, dw, dh)
-                finalText = second.text
+                const executor = executors[tc.function.name]
+                if (executor) {
+                    const result = await executor(args)
+                    msgs.push({ role: 'assistant', content: first.text || null, tool_calls: [tc] })
+                    msgs.push({ role: 'tool', tool_call_id: tc.id, name: tc.function.name, content: result })
+
+                    store.appendStreamText(tempId, '')
+                    store.appendStreamReasoning(tempId, first.reasoning)
+                    const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl)
+                    finalText = second.text
+                }
             }
         }
 
@@ -826,21 +907,20 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             store.finishStreamReply(tempId)
         }
     } finally {
-        store.setLoading(false)
-        store.setAbortController(null)
-        abortController = null
+        store.setLoading(false, convId)
+        store.setAbortController(null, convId)
     }
 }
 
 function stopGeneration() {
-    // Abort agent if running for current conversation
     const convId = store.currentId
+    // Abort agent if running
     if (agentAbortMap[convId]) {
         agentAbortMap[convId].abort()
         delete agentAbortMap[convId]
     }
-    // Also abort normal stream
-    store.abort()
+    // Abort normal stream for THIS conversation
+    store.abort(convId)
 }
 
 // ─── Agent timer ───
@@ -862,9 +942,93 @@ function getAgentDuration(convId) {
     return Date.now() - start
 }
 
+// User clicked a device card in the chat → continue AI with device context
+async function onPickDevice(pickerMsg, device) {
+    const convId = store.currentId
+    // Replace the picker message text with selected device info
+    pickerMsg._devicePicker = false
+    pickerMsg.text = `已选择设备：${device.name}（${device.w}×${device.h}）`
+    pickerMsg._designSummary = ''
+    store.messagesMap[convId] = [...(store.messagesMap[convId] || [])]
+
+    // Get the user's original design request (last user message)
+    const msgs = store.messagesMap[convId] || []
+    const userMsgs = msgs.filter(m => m.role === 'user')
+    const lastUser = userMsgs[userMsgs.length - 1]
+    const designText = lastUser ? (lastUser._apiText || lastUser.text) : ''
+
+    // Send design request with device context
+    const dev = device.w ? device : { ...device, w: 375, h: 667 }
+    const finalText = buildDesignPrompt(designText, dev)
+    store.setLoading(true, convId)
+    const tempId = store.startStreamReply()
+    const abortCtrl = new AbortController()
+    store.setAbortController(abortCtrl, convId)
+    store.updateStreamCleanText(tempId, '思考中...')
+    store.appendStreamDesignProgress(tempId, 10)
+
+    try {
+        const msgs2 = buildMessages(tempId)
+        // Override last user message with the design prompt
+        for (let i = msgs2.length - 1; i >= 0; i--) {
+            if (msgs2[i].role === 'user') { msgs2[i].content = finalText; break }
+        }
+        const first = await doStream(msgs2, tempId, [], true, dev.w, dev.h, abortCtrl)
+        let final = first.text
+        store.finishStreamReply(tempId)
+
+        // Extract designs
+        const aiMsgs = store.messagesMap[convId] || []
+        const aiMsg = aiMsgs[aiMsgs.length - 1]
+        if (aiMsg) {
+            const rawText = aiMsg._rawText || ''
+            let designs = parseDesignBlocks(rawText)
+            if (!designs.length) {
+                const mdBlock = extractFirstHtmlBlock(rawText)
+                if (mdBlock) designs = [{ width: dev.w, height: dev.h, html: mdBlock }]
+            }
+            if (!designs.length) {
+                const html = extractRawHtml(rawText)
+                if (html) designs = [{ width: dev.w, height: dev.h, html }]
+            }
+            if (designs.length) aiMsg.designs = designs
+            aiMsg.text = ''
+            aiMsg.designProgress = 0
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            store.updateStreamCleanText(tempId, '请求失败: ' + e.message)
+            store.finishStreamReply(tempId)
+        }
+    } finally {
+        store.setLoading(false, convId)
+        store.setAbortController(null, convId)
+    }
+}
+
+// Pick device for pre-send flow (legacy bar — kept for compatibility)
+function pickDeviceLegacy(d) {
+    if (d.id === 'custom') {
+        const val = prompt('输入设备尺寸，格式: 宽x高，例如 1024x768')
+        if (!val) return
+        const parts = val.split(/[x×X,，\s]+/)
+        const w = parseInt(parts[0]) || 800
+        const h = parseInt(parts[1]) || 600
+        selectedDevice.value = { name: `自定义 (${w}x${h})`, w, h }
+    } else {
+        selectedDevice.value = d
+    }
+    showDeviceBar.value = false
+    if (pendingDesignText.value) {
+        const text = pendingDesignText.value
+        pendingDesignText.value = ''
+        inputText.value = ''
+        _doSend(text)
+    }
+}
+
 async function regenerate() {
     if (agentRunningMap[store.currentId]) return
-    // Find if the last user message had design info
     const msgs = store.visibleMessages
     let device = null
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -873,6 +1037,7 @@ async function regenerate() {
             break
         }
     }
+    selectedDevice.value = (device)
     const isDesign = !!device
     await callStreamAPI([], isDesign, isDesign, device)
 }
@@ -942,22 +1107,8 @@ async function generateTitle(userMsg, convId) {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  padding-top: 12px;
 }
-
-/* Device selector */
-.device-bar {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 16px; flex-shrink: 0;
-}
-.device-label { font-size: 12px; color: var(--text3); font-weight: 300; flex-shrink: 0; }
-.device-btn {
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--bg2); color: var(--text2); font-size: 11px;
-  padding: 3px 10px; cursor: pointer; font-family: inherit; font-weight: 300;
-  transition: background .12s, border-color .12s;
-}
-.device-btn:hover { background: var(--bg3); color: var(--text); }
-.device-btn.active { background: var(--accent-muted); border-color: var(--accent); color: var(--accent); }
 
 /* Preview overlay */
 .preview-overlay {

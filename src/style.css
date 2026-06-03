@@ -91,6 +91,8 @@ body {
 .markdown-body a { color: var(--accent); text-decoration: none; }
 .markdown-body a:hover { color: var(--accent-hover); }
 .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+/* AI paragraph separators — subtle blue dividers for readability */
+.markdown-body p + p { border-top: 1px solid rgba(79,125,255,0.12); margin-top: 14px; padding-top: 14px; }
 .markdown-body img { max-width: 100%; border-radius: 4px; }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
   margin: 12px 0 6px;

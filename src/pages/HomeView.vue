@@ -132,14 +132,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, inject } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch, inject } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../store/chatStore.js'
 import { isLoggedIn } from '../api/index.js'
 import { useI18n } from '../composables/useI18n.js'
 import ChatView from './ChatView.vue'
 
 const router = useRouter()
+const route = useRoute()
 const store = useChatStore()
 const { t } = useI18n()
 const openSettings = inject('openSettings')
@@ -225,10 +226,26 @@ function openFeature(type) {
   router.push('/chat/' + id)
 }
 
+// Sync URL param → store tab
+function syncRoute() {
+  const id = route.params.id
+  if (id && id !== store.currentId) {
+    store.loadMessages(id)
+  }
+}
+
+watch(() => route.params.id, (id) => {
+  if (id) {
+    if (!store.messagesMap[id]) store.loadMessages(id)
+    else store.switchTab(id)
+  }
+})
+
 onMounted(() => {
   store.loadApiKey()
   store.loadConversations()
   loggedIn.value = isLoggedIn()
+  syncRoute()
 })
 </script>
 
@@ -267,25 +284,37 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
-  border-bottom: 2px solid transparent;
+  padding: 5px 12px;
+  border-radius: var(--radius);
   cursor: pointer;
   font-size: 13px;
   color: var(--text3);
   font-weight: 300;
   white-space: nowrap;
-  transition: color .15s, border-color .15s;
+  transition: all .15s;
   flex-shrink: 0;
   border: none;
   background: transparent;
   font-family: inherit;
 }
-.tab:hover { color: var(--text2); }
-.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent-muted);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.tab:hover { color: var(--text2); background: rgba(255,255,255,0.03); }
+.tab:hover::before { opacity: 1; }
+.tab.active { color: var(--text); background: rgba(79,125,255,0.08); }
+.tab.active::before { opacity: 1; background: var(--accent); }
 
 .tab-title { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .tab-close {
   width: 16px; height: 16px;
+  margin-left: 4px;
   border-radius: 4px;
   border: none;
   background: transparent;

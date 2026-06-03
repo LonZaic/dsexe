@@ -6,7 +6,7 @@ import {
     updateMessage, deleteMessage, deleteMessagesSince
 } from '../db/database.js'
 
-let _abortController = null
+const _abortMap = {}  // per-conversation abort controllers
 
 export const useChatStore = defineStore('chat', {
     state: () => ({
@@ -18,7 +18,7 @@ export const useChatStore = defineStore('chat', {
         apikey: '',
         model: 'deepseek-v4-flash',
         permissionMode: 'default',   // 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions'
-        isLoading: false,
+        loadingMap: {},         // { [convId]: boolean } — per-conversation loading state
         streamingId: null,
         streamingConvId: null,  // which conversation owns the active stream
     }),
@@ -258,12 +258,15 @@ export const useChatStore = defineStore('chat', {
             const reasoning = msg.reasoning || ''
             const realId = addMessage(convId, 'ai', msg.text, msg.parent_id, '[]', designsJson, reasoning)
             const idx = msgs.findIndex(m => m.id === tempId)
+            const finalMsg = {
+                role: 'ai', text: msg.text, reasoning,
+                id: realId, parent_id: msg.parent_id,
+                designs: msg.designs || [],
+                _rawText: msg._rawText || '',
+                _agentEvents: msg._agentEvents || [],
+            }
             if (idx !== -1) {
-                msgs[idx] = {
-                    role: 'ai', text: msg.text, reasoning,
-                    id: realId, parent_id: msg.parent_id,
-                    designs: msg.designs || [],
-                }
+                msgs[idx] = finalMsg
             }
             this.messagesMap[convId] = [...msgs]
             if (msg.parent_id != null) {
@@ -273,6 +276,8 @@ export const useChatStore = defineStore('chat', {
             }
             this.streamingId = null
             this.streamingConvId = null
+            this._lastFinishedId = realId
+            this._lastFinishedMsg = finalMsg
             return realId
         },
 
@@ -347,9 +352,13 @@ export const useChatStore = defineStore('chat', {
             }
         },
 
-        // ─── loading ───
-        setLoading(val) {
-            this.isLoading = val
+        // ─── loading (per-conversation) ───
+        setLoading(val, convId) {
+            const cid = convId || this.currentId
+            this.loadingMap = { ...this.loadingMap, [cid]: val }
+        },
+        isLoadingFor(convId) {
+            return !!this.loadingMap[convId || this.currentId]
         },
 
         // ─── API key & model ───
@@ -377,15 +386,18 @@ export const useChatStore = defineStore('chat', {
             localStorage.setItem('permissionMode', mode)
         },
 
-        // ─── abort controller ───
-        setAbortController(ctrl) {
-            _abortController = ctrl
+        // ─── abort controller (per-conversation) ───
+        setAbortController(ctrl, convId) {
+            const cid = convId || this.currentId
+            _abortMap[cid] = ctrl
         },
 
-        abort() {
-            if (_abortController) {
-                _abortController.abort()
-                _abortController = null
+        abort(convId) {
+            const cid = convId || this.currentId
+            const ctrl = _abortMap[cid]
+            if (ctrl) {
+                ctrl.abort()
+                delete _abortMap[cid]
             }
         },
     }

@@ -1,6 +1,5 @@
 <template>
     <div :class="['msg', role, { streaming }]">
-        <span class="avatar">{{ role === 'user' ? 'U' : 'A' }}</span>
         <div class="body">
             <!-- thinking / reasoning -->
             <div v-if="role === 'ai' && reasoning" class="thinking-box">
@@ -106,6 +105,47 @@
                 <span v-if="streaming && !text" class="stream-cursor"></span>
             </template>
 
+            <!-- ═══ AI: Device picker (AI requests device selection) ═══ -->
+            <template v-else-if="role === 'ai' && devicePicker">
+                <div class="device-pick-msg">
+                    <div class="device-pick-label">{{ designSummary || t('selectDevice') }}</div>
+                    <div class="device-pick-cards">
+                        <button
+                            v-for="d in DEVICES"
+                            :key="d.id"
+                            class="device-pick-card"
+                            @click="$emit('pickDevice', d)"
+                        >
+                            <div class="device-pick-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                    <template v-if="d.id === 'phone'">
+                                        <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                                        <line x1="9" y1="18" x2="15" y2="18" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                    </template>
+                                    <template v-else-if="d.id === 'tablet'">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                                        <line x1="9" y1="16" x2="15" y2="16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                    </template>
+                                    <template v-else-if="d.id === 'desktop'">
+                                        <rect x="2" y="2" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                                        <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                        <line x1="8" y1="20" x2="16" y2="20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                    </template>
+                                    <template v-else>
+                                        <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/>
+                                        <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                        <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                                    </template>
+                                </svg>
+                            </div>
+                            <span class="device-pick-name">{{ d.name }}</span>
+                            <span class="device-pick-size" v-if="d.w">{{ d.w }}×{{ d.h }}</span>
+                        </button>
+                    </div>
+                    <p class="device-pick-hint">{{ t('selectDevice') }}</p>
+                </div>
+            </template>
+
             <!-- ═══ AI normal message (with or without streaming) ═══ -->
             <template v-else-if="role === 'ai'">
                 <div class="bubble markdown-body" v-html="renderedText"></div>
@@ -138,7 +178,7 @@ import { ref, computed, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown.js'
 import { loadFile } from '../utils/fileDB.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
-import { guessDeviceType } from '../utils/designPreview.js'
+import { guessDeviceType, DEVICES } from '../utils/designPreview.js'
 import { useI18n } from '../composables/useI18n.js'
 
 const { t } = useI18n()
@@ -155,9 +195,11 @@ const props = defineProps({
     siblingCount: { type: Number, default: 1 },
     siblingIndex: { type: Number, default: 1 },
     agentEvents: { type: Array, default: () => [] },
+    devicePicker: { type: Boolean, default: false },
+    designSummary: { type: String, default: '' },
 })
 
-defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch'])
+defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice'])
 
 async function previewFile(f) {
     if (f.type?.startsWith('image/')) {
@@ -307,7 +349,7 @@ function deviceLabel(d) {
     return map[guessDeviceType(d)] || t('device')
 }
 
-const MAX_PREVIEW_W = 480
+const MAX_PREVIEW_W = 400
 
 function designScale(d) {
     const s = Math.min(1, MAX_PREVIEW_W / d.width)
@@ -353,40 +395,31 @@ async function copyText() {
 .msg {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
     max-width: 78%;
+    padding: 6px 0;
 }
 .msg.user {
     margin-left: auto;
     max-width: 65%;
-    flex-direction: row-reverse;
-}
-.avatar {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 500; flex-shrink: 0;
-    color: var(--accent); background: var(--bg3); border: 1px solid var(--border);
-}
-.msg.user .avatar {
-    color: var(--accent); background: var(--accent-muted); border-color: var(--accent);
-}
-.msg.ai .avatar {
-    color: var(--text2); background: var(--bg3); border-color: var(--border);
+    justify-content: flex-end;
 }
 .body { position: relative; min-width: 0; }
 .bubble {
     padding: 10px 14px; font-size: 14px; line-height: 1.6;
     color: var(--text); word-break: break-word;
-    background: transparent; border-radius: var(--radius-lg);
+    background: transparent; border-radius: var(--radius);
     font-weight: 300;
 }
 .msg.user .bubble {
     background: var(--bg3); border: 1px solid var(--border);
-    border-bottom-right-radius: 4px;
+    border-radius: var(--radius-lg);
+}
+.msg.ai .body {
+    border-left: 2px solid var(--accent);
+    padding-left: 14px;
 }
 .msg.ai .bubble {
-    border-bottom-left-radius: 4px;
+    border-radius: var(--radius);
 }
 
 /* ─── thinking / reasoning ─── */
@@ -474,6 +507,7 @@ async function copyText() {
     position: relative;
     display: inline-block;
     border: 1px solid var(--border);
+    border-radius: var(--radius);
     background: var(--bg);
     overflow: hidden;
     transition: border-color 0.2s;
@@ -618,4 +652,31 @@ async function copyText() {
     padding: 8px;
     background: var(--bg2);
 }
+
+/* ═══ Device picker in chat ═══ */
+.device-pick-msg {
+    padding: 4px 0;
+}
+.device-pick-label {
+    font-size: 13px; color: var(--text); font-weight: 400;
+    margin-bottom: 10px;
+}
+.device-pick-cards {
+    display: flex; gap: 8px; flex-wrap: wrap;
+}
+.device-pick-card {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 5px; padding: 10px 14px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg2); color: var(--text2);
+    font-size: 12px; font-family: inherit; font-weight: 300;
+    cursor: pointer; transition: all .15s;
+    min-width: 72px;
+}
+.device-pick-card:hover { background: var(--bg3); border-color: var(--accent); color: var(--text); }
+.device-pick-icon { color: var(--text3); transition: color .15s; }
+.device-pick-card:hover .device-pick-icon { color: var(--accent); }
+.device-pick-name { font-weight: 400; }
+.device-pick-size { font-size: 10px; color: var(--text3); }
+.device-pick-hint { font-size: 11px; color: var(--text3); margin-top: 8px; margin-bottom: 0; }
 </style>

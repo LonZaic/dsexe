@@ -7,14 +7,24 @@ export const DEVICES = [
     { id: 'custom',  name: '自定义',w: 0,   h: 0,   icon: '?' },
 ]
 
-const DESIGN_KEYWORDS = [
-    '设计', '画', '做', '写', '生成', '创建', '实现', '开发',
-    '页面', '界面', 'UI', '按钮', '表单', '登录', '注册',
-    '导航', '卡片', '列表', '菜单', '弹窗', '首页', '官网',
-    '布局', '样式', '前端', 'HTML', 'CSS', '组件',
-    'design', 'layout', 'component',
+// Action verbs — user wants to CREATE something
+const ACTION_WORDS = [
+    '画', '做', '写', '生成', '创建', '实现', '开发', '设计', '制作', '构建', '搭建',
+    'build', 'create', 'make', 'design', 'generate', 'develop', 'code',
+    '帮我做', '帮我写', '帮我画', '帮我设计', '帮我创建', '帮我生成',
 ]
 
+// Target nouns — what user wants to create (must be visual/ui related)
+const TARGET_WORDS = [
+    '页面', '网页', '界面', '网站', '官网', '首页', '登陆页', '着陆页',
+    'UI', '前端', 'HTML', 'CSS', '组件', '布局', '样式', '按钮', '表单',
+    '导航', '卡片', '列表', '菜单', '弹窗', '仪表盘', 'dashboard',
+    '登录页', '注册页', '个人主页', '作品集',
+    'landing page', 'webpage', 'website', 'frontend', 'homepage',
+    'layout', 'component', 'button', 'form', 'navbar', 'card', 'modal',
+]
+
+// Device hints in the user message
 const DEVICE_KEYWORDS = [
     '手机', '移动端', 'mobile', 'phone', 'iPhone', '安卓',
     '平板', 'iPad', 'tablet', 'pad',
@@ -22,10 +32,13 @@ const DEVICE_KEYWORDS = [
     '大屏', '宽屏', '显示器',
 ]
 
-// check if message is a design request
+// check if message is a genuine design request (action + visual target)
 export function isDesignRequest(text) {
     const t = text.toLowerCase()
-    return DESIGN_KEYWORDS.some(k => t.includes(k.toLowerCase()))
+    const hasAction = ACTION_WORDS.some(k => t.includes(k.toLowerCase()))
+    const hasTarget = TARGET_WORDS.some(k => t.includes(k.toLowerCase()))
+    // Must have BOTH an action AND a visual target to trigger device picker
+    return hasAction && hasTarget
 }
 
 // check if device type is specified
