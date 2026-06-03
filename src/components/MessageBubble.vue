@@ -350,49 +350,50 @@ async function copyText() {
 .msg {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    max-width: 75%;
+    gap: 10px;
+    max-width: 78%;
 }
 .msg.user {
     margin-left: auto;
-    max-width: 60%;
+    max-width: 65%;
     flex-direction: row-reverse;
-    margin-right: 4px;
 }
 .avatar {
-    width: 24px; height: 24px;
-    border: 1px solid var(--border-light);
+    width: 28px; height: 28px;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 10px; font-weight: 700; flex-shrink: 0;
-    color: var(--text-muted); background: var(--bg-secondary);
+    font-size: 11px; font-weight: 500; flex-shrink: 0;
+    color: var(--accent); background: var(--bg3); border: 1px solid var(--border);
 }
 .msg.user .avatar {
-    border-color: var(--primary); color: var(--primary); background: var(--primary-bg);
+    color: var(--accent); background: var(--accent-muted); border-color: var(--accent);
 }
 .msg.ai .avatar {
-    border-color: var(--green); color: var(--green);
+    color: var(--text2); background: var(--bg3); border-color: var(--border);
 }
 .body { position: relative; min-width: 0; }
 .bubble {
-    border: 1px solid transparent;
-    padding: 6px 10px; font-size: 13px; line-height: 1.55;
+    padding: 10px 14px; font-size: 14px; line-height: 1.6;
     color: var(--text); word-break: break-word;
-    background: var(--bg); border-radius: 0;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    background: transparent; border-radius: var(--radius-lg);
+    font-weight: 300;
 }
 .msg.user .bubble {
-    background: var(--primary-bg); border-color: var(--primary); white-space: pre-wrap;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-bottom-right-radius: 4px;
+}
+.msg.ai .bubble {
+    border-bottom-left-radius: 4px;
 }
 
 /* ─── thinking / reasoning ─── */
-.thinking-box { border-left: 2px solid var(--border-light); margin-bottom: 6px; padding-left: 8px; }
+.thinking-box { border-left: 2px solid var(--accent-muted); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-bottom: 6px; padding-left: 8px; }
 .thinking-head { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; padding: 2px 0; }
-.thinking-head:hover { color: var(--text-secondary); }
-.thinking-arrow { font-size: 10px; width: 10px; flex-shrink: 0; color: var(--text-muted); }
-.thinking-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.3px; }
+.thinking-head:hover { color: var(--text2); }
+.thinking-arrow { font-size: 10px; width: 10px; flex-shrink: 0; color: var(--text3); }
+.thinking-label { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: 0.3px; }
 .thinking-body {
-    font-size: 12px; line-height: 1.55; color: var(--text-muted);
+    font-size: 12px; line-height: 1.55; color: var(--text3);
     white-space: pre-wrap; word-break: break-word; padding: 4px 0 2px;
     max-height: 180px; overflow-y: auto;
 }
@@ -400,19 +401,19 @@ async function copyText() {
 /* ─── branch version ─── */
 .branch-nav { display: flex; align-items: center; gap: 5px; margin-top: 3px; }
 .branch-btn {
-    height: 18px; padding: 0 5px; font-size: 10px;
-    border: 1px solid var(--border-light); background: var(--bg-secondary);
+    height: 20px; border-radius: var(--radius-sm); font-family: inherit; padding: 0 5px; font-size: 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2);
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    color: var(--text-muted); transition: background 0.1s;
+    color: var(--text3); transition: background 0.1s;
 }
-.branch-btn:hover { background: var(--bg-hover); color: var(--text); }
-.branch-num { font-size: 10px; color: var(--text-muted); min-width: 24px; text-align: center; }
+.branch-btn:hover { background: var(--bg3); color: var(--text); }
+.branch-num { font-size: 10px; color: var(--text3); min-width: 24px; text-align: center; }
 
 /* ─── file chips ─── */
 .file-bar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; justify-content: flex-end; }
 .file-chip {
     display: flex; align-items: center; gap: 3px;
-    padding: 2px 6px; font-size: 11px; border: 1px solid; height: 22px;
+    padding: 3px 8px; font-size: 11px; border: 1px solid; height: 24px; border-radius: var(--radius-full);
 }
 .file-chip-name { cursor: pointer; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -443,12 +444,12 @@ async function copyText() {
 .msg.user .msg-actions { justify-content: flex-end; }
 .body:hover .msg-actions { opacity: 1; }
 .msg-actions button {
-    height: 20px; padding: 0 6px; font-size: 11px;
-    border: 1px solid var(--border-light); background: var(--bg-secondary);
+    height: 24px; border-radius: var(--radius-full); padding: 0 8px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2);
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    color: var(--text-muted); transition: background 0.1s, border-color 0.1s, color 0.1s;
+    color: var(--text3); transition: background 0.1s, border-color 0.1s, color 0.1s;
 }
-.msg-actions button:hover { background: var(--bg-hover); color: var(--text); }
+.msg-actions button:hover { background: var(--bg3); color: var(--text); }
 .msg-actions button.del:hover { border-color: var(--red); color: var(--red); }
 
 /* ═══════════════════════════════
@@ -481,9 +482,9 @@ async function copyText() {
 .design-export-btn {
     position: absolute;
     bottom: 4px; right: 4px;
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--bg);
-    color: var(--text-muted);
+    color: var(--text3);
     font-size: 10px; cursor: pointer;
     padding: 1px 6px;
     opacity: 0;
@@ -496,7 +497,7 @@ async function copyText() {
 .design-device-label {
     display: block;
     font-size: 10px; font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text2);
     margin-top: 3px; letter-spacing: 0.3px;
 }
 
@@ -511,7 +512,7 @@ async function copyText() {
     margin-top: 2px;
 }
 .design-drawing-icon {
-    color: var(--text-muted);
+    color: var(--text3);
     animation: drawingPulse 1.5s ease-in-out infinite;
 }
 @keyframes drawingPulse {
@@ -520,7 +521,7 @@ async function copyText() {
 }
 .design-drawing-label {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text2);
 }
 
 /* ─── Agent status bar — clean, like drawing mode ─── */
@@ -531,12 +532,12 @@ async function copyText() {
   cursor: pointer; user-select: none;
   transition: background 0.2s;
 }
-.agent-status:hover { background: var(--bg-hover); }
+.agent-status:hover { background: var(--bg3); }
 .agent-status.agent-done { cursor: default; }
 .agent-svg { flex-shrink: 0; color: var(--primary); width: 16px; height: 16px; }
 .agent-done .agent-svg { color: var(--green); }
 .agent-phase-text {
-  flex: 1; font-size: 12px; font-weight: 500; color: var(--text-secondary);
+  flex: 1; font-size: 12px; font-weight: 500; color: var(--text2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Light sweep on text only — no blue block */
@@ -554,7 +555,7 @@ async function copyText() {
   100% { left: 120%; }
 }
 .agent-timer {
-  font-size: 10px; color: var(--text-muted); flex-shrink: 0;
+  font-size: 10px; color: var(--text3); flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 .agent-timer.done { color: var(--green); }
@@ -562,7 +563,7 @@ async function copyText() {
 /* Collapsible tool details */
 .agent-details {
   margin: 2px 0 6px 24px; padding: 4px 8px;
-  border-left: 1px solid var(--border-light);
+  border-left: 1px solid var(--border);
   max-height: 160px; overflow-y: auto;
 }
 .agent-step {
@@ -575,9 +576,9 @@ async function copyText() {
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--primary); flex-shrink: 0; margin-top: 4px;
 }
-.agent-step-dot.done { background: var(--text-muted); }
-.agent-step-act { color: var(--text-secondary); flex-shrink: 0; }
-.agent-step-det { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-step-dot.done { background: var(--text3); }
+.agent-step-act { color: var(--text2); flex-shrink: 0; }
+.agent-step-det { color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ═══════════════════════════════
    Collapsible raw output viewer
@@ -594,14 +595,14 @@ async function copyText() {
     user-select: none;
     padding: 2px 0;
 }
-.raw-output-head:hover { color: var(--text-secondary); }
+.raw-output-head:hover { color: var(--text2); }
 .raw-output-arrow {
     font-size: 9px; width: 10px; flex-shrink: 0;
-    color: var(--text-muted);
+    color: var(--text3);
 }
 .raw-output-label {
     font-size: 11px; font-weight: 600;
-    color: var(--text-muted); letter-spacing: 0.3px;
+    color: var(--text3); letter-spacing: 0.3px;
 }
 .raw-output-body {
     margin-top: 4px;
@@ -609,9 +610,9 @@ async function copyText() {
     overflow-y: auto;
     font-size: 11px; line-height: 1.5;
     white-space: pre-wrap; word-break: break-word;
-    color: var(--text-muted);
-    border: 1px solid var(--border-light);
+    color: var(--text3);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 8px;
-    background: var(--bg-secondary);
+    background: var(--bg2);
 }
 </style>

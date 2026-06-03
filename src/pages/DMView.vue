@@ -233,28 +233,28 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.app-layout { display: flex; height: 100vh; height: 100dvh; background: var(--bg); }
+.app-layout { display: flex; height: 100vh; height: 100dvh; background: var(--bg2); }
 .main-area { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-.chat-header { height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid var(--border); flex-shrink: 0; background: var(--bg); }
-.btn-back { border: 1px solid var(--border-light); background: transparent; color: var(--text-secondary); padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.chat-header { height: 48px; padding: 0 16px; display: flex; align-items: center; gap: 10px; border-bottom: 2px solid var(--border); flex-shrink: 0; background: var(--bg2); }
+.btn-back { border: 1px solid var(--border); background: transparent; color: var(--text2); padding: 4px 10px; font-size: 12px; cursor: pointer; }
 .btn-back:hover { background: var(--bg-hover); }
 .status-light { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
 .status-light.online { background: var(--green); }
 .chat-title { font-size: 14px; font-weight: 600; color: var(--text); }
-.chat-subtitle { font-size: 11px; color: var(--text-muted); }
+.chat-subtitle { font-size: 11px; color: var(--text3); }
 .msg-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
-.loading { text-align: center; font-size: 12px; color: var(--text-muted); padding: 20px; }
+.loading { text-align: center; font-size: 12px; color: var(--text3); padding: 20px; }
 .msg { max-width: 75%; display: flex; flex-direction: column; gap: 2px; }
 .msg.me { align-self: flex-end; }
 .msg.them { align-self: flex-start; }
-.msg-sender { font-size: 10px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.3px; }
-.msg-bubble { border: 1px solid var(--border-light); padding: 8px 12px; font-size: 13px; line-height: 1.5; color: var(--text); word-break: break-word; background: var(--bg); }
+.msg-sender { font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: 0.3px; }
+.msg-bubble { border: 1px solid var(--border); padding: 8px 12px; font-size: 13px; line-height: 1.5; color: var(--text); word-break: break-word; background: var(--bg2); }
 .msg.me .msg-bubble { background: var(--primary-bg); border-color: var(--primary); }
 .ai-bubble { border-color: var(--green); border-left: 3px solid var(--green); }
 .cursor { display: inline-block; width: 6px; height: 14px; background: var(--primary); animation: blink 0.8s infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 .input-area { border-top: 2px solid var(--border); padding: 12px 20px; display: flex; gap: 10px; flex-shrink: 0; }
-.input-area textarea { flex: 1; border: 1px solid var(--border-light); padding: 8px 12px; font-size: 13px; font-family: inherit; outline: none; resize: none; min-height: 28px; max-height: 100px; background: var(--bg); color: var(--text); }
+.input-area textarea { flex: 1; border: 1px solid var(--border); padding: 8px 12px; font-size: 13px; font-family: inherit; outline: none; resize: none; min-height: 28px; max-height: 100px; background: var(--bg2); color: var(--text); }
 .input-area textarea:focus { border-color: var(--primary); }
 .input-area textarea:disabled { opacity: 0.5; }
 .btn-send { border: 1px solid var(--primary); background: var(--primary); color: #fff; padding: 6px 16px; font-size: 13px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
@@ -265,7 +265,7 @@ onUnmounted(() => {
   .chat-header { padding: 0 8px 0 32px; padding-top: env(safe-area-inset-top, 0px); min-height: 44px; gap: 6px; }
   .msg-list { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; gap: 8px; }
   .msg { max-width: 88% !important; }
-  .input-area { padding: 8px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); gap: 6px; background: var(--bg); }
+  .input-area { padding: 8px 12px; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); gap: 6px; background: var(--bg2); }
   .input-area textarea { font-size: 16px; padding: 10px 12px; }
   .btn-send { min-height: 44px; padding: 10px 14px; font-size: 14px; }
   .btn-back { min-height: 44px; }

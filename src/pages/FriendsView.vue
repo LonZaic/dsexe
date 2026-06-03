@@ -158,7 +158,7 @@ onUnmounted(() => {
 .app-layout {
   display: flex;
   height: 100vh;
-  background: var(--bg);
+  background: var(--bg2);
 }
 .main-area {
   flex: 1;
@@ -185,18 +185,18 @@ onUnmounted(() => {
 }
 .add-friend-bar input {
   flex: 1;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius); border-radius: var(--radius-lg);
   padding: 8px 12px;
   font-size: 13px;
   outline: none;
-  background: var(--bg);
+  background: var(--bg2);
   color: var(--text);
   font-family: inherit;
 }
 .add-friend-bar input:focus { border-color: var(--primary); }
 .btn-search {
-  border: 2px solid var(--border);
-  background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius); border-radius: var(--radius-lg);
+  background: var(--bg2);
   padding: 8px 16px;
   font-size: 13px;
   cursor: pointer;
@@ -209,19 +209,19 @@ onUnmounted(() => {
 .section-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border);
 }
 .user-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   margin-bottom: 4px;
 }
 .friend-row {
@@ -229,7 +229,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   margin-bottom: 4px;
   cursor: pointer;
   transition: background 0.1s;
@@ -250,11 +250,11 @@ onUnmounted(() => {
 }
 .friend-status {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text3);
 }
 .btn-add, .btn-accept, .btn-msg {
   border: 1px solid var(--primary);
-  background: var(--bg);
+  background: var(--bg2);
   color: var(--primary);
   padding: 4px 10px;
   font-size: 11px;
@@ -265,9 +265,9 @@ onUnmounted(() => {
   background: var(--primary-bg);
 }
 .btn-reject, .btn-del {
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text3);
   padding: 4px 8px;
   font-size: 11px;
   cursor: pointer;
@@ -276,7 +276,7 @@ onUnmounted(() => {
 .btn-reject:hover, .btn-del:hover { color: var(--red); }
 .empty {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text3);
   padding: 12px 0;
 }
 @media (max-width: 768px) {

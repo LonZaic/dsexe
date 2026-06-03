@@ -127,7 +127,7 @@ onMounted(load)
 .app-layout {
   display: flex;
   height: 100vh;
-  background: var(--bg);
+  background: var(--bg2);
 }
 .main-area {
   flex: 1;
@@ -154,11 +154,11 @@ onMounted(load)
 }
 .bar input {
   flex: 1;
-  border: 2px solid var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius); border-radius: var(--radius-lg);
   padding: 8px 12px;
   font-size: 13px;
   outline: none;
-  background: var(--bg);
+  background: var(--bg2);
   color: var(--text);
   font-family: inherit;
 }
@@ -184,19 +184,19 @@ onMounted(load)
 .section-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border);
 }
 .group-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   margin-bottom: 4px;
   cursor: pointer;
   transition: background 0.1s;
@@ -210,19 +210,19 @@ onMounted(load)
 }
 .group-meta {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text3);
 }
 .group-code {
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text2);
   letter-spacing: 0.5px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   padding: 2px 6px;
 }
 .btn-join {
   border: 1px solid var(--primary);
-  background: var(--bg);
+  background: var(--bg2);
   color: var(--primary);
   padding: 4px 10px;
   font-size: 11px;
@@ -232,7 +232,7 @@ onMounted(load)
 .btn-join:hover { background: var(--primary-bg); }
 .empty {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text3);
   padding: 12px 0;
 }
 @media (max-width: 768px) {

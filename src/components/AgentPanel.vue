@@ -111,8 +111,8 @@ defineExpose({ start })
 </script>
 
 <style scoped>
-.agent-panel { border: 1px solid var(--border); margin: 0 16px; background: var(--bg); font-family: 'Cascadia Code','Fira Code',Consolas,monospace; font-size: 11px; overflow: hidden; transition: border-color .2s; }
-.agent-header { display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:pointer; user-select:none; border-bottom:1px solid var(--border-light); }
+.agent-panel { border: 1px solid var(--border); border-radius: var(--radius); margin: 0 16px; background: var(--bg2); font-family: 'Cascadia Code','Fira Code',Consolas,monospace; font-size: 11px; overflow: hidden; transition: border-color .2s; }
+.agent-header { display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:pointer; user-select:none; border-bottom:1px solid var(--border); }
 .agent-header:hover { background: var(--bg-hover); }
 .dot { width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex-shrink:0; }
 .dot.run { background:var(--green); animation: pulse 1s infinite; }
@@ -127,7 +127,7 @@ defineExpose({ start })
 .close-btn:hover { color:var(--red); }
 .body { max-height:280px; overflow-y:auto; padding:6px 10px; display:flex; flex-direction:column; gap:1px; position:relative; }
 .body::-webkit-scrollbar { width:3px; }
-.body::-webkit-scrollbar-thumb { background:var(--border-light); }
+.body::-webkit-scrollbar-thumb { background:var(--border); }
 .line { display:flex; align-items:baseline; gap:5px; line-height:1.4; padding:1px 0; }
 .dot-sm { width:4px; height:4px; border-radius:50%; background:var(--primary); flex-shrink:0; margin-top:4px; }
 .act { color:var(--text-secondary); font-weight:500; }

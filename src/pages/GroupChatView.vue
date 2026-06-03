@@ -212,17 +212,17 @@ onUnmounted(()=>{ unsubs.forEach(f=>f()) })
 .app-layout{display:flex;height:100vh;height:100dvh;background:var(--bg);overflow:hidden}
 .main-area{flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;height:100dvh}
 .chat-header{height:48px;padding:0 12px;display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--border);flex-shrink:0;background:var(--bg)}
-.btn-back{border:1px solid var(--border-light);background:none;color:var(--text-secondary);padding:4px 8px;font-size:11px;cursor:pointer}
+.btn-back{border:1px solid var(--border);background:none;color:var(--text-secondary);padding:4px 8px;font-size:11px;cursor:pointer}
 .chat-title{font-size:14px;font-weight:600;color:var(--text);flex:1}
 .chat-sub{font-size:11px;color:var(--text-muted)}
-.invite-code{font-size:9px;color:var(--text-muted);border:1px solid var(--border-light);padding:2px 6px}
+.invite-code{font-size:9px;color:var(--text-muted);border:1px solid var(--border);padding:2px 6px}
 .btn-leave{border:1px solid var(--red);background:none;color:var(--red);width:22px;height:22px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .btn-leave:hover{background:var(--red);color:#fff}
 
 /* Agent area */
 .agent-area{border:1px solid var(--green);margin:0 12px;background:var(--bg);font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:10px;flex-shrink:0}
 .agent-area.fold{margin-bottom:2px}
-.agent-top{display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border-light)}
+.agent-top{display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border)}
 .agent-top:hover{background:var(--bg-hover)}
 .adot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
 .adot.run{background:var(--green);animation:pulse 1s infinite}
@@ -233,7 +233,7 @@ onUnmounted(()=>{ unsubs.forEach(f=>f()) })
 .aarr{font-size:9px;color:var(--text-muted)}
 .abody{max-height:220px;overflow-y:auto;padding:4px 8px;display:flex;flex-direction:column;gap:1px;position:relative}
 .abody::-webkit-scrollbar{width:3px}
-.abody::-webkit-scrollbar-thumb{background:var(--border-light)}
+.abody::-webkit-scrollbar-thumb{background:var(--border)}
 .aline{display:flex;align-items:baseline;gap:4px;line-height:1.35;padding:1px 0}
 .adots{width:3px;height:3px;border-radius:50%;background:var(--primary);flex-shrink:0;margin-top:4px}
 .aact{color:var(--text-secondary);font-weight:500}
@@ -251,7 +251,7 @@ onUnmounted(()=>{ unsubs.forEach(f=>f()) })
 .msg.them{align-self:flex-start}
 .msg.ai{align-self:flex-start;max-width:85%}
 .msg-sender{font-size:9px;font-weight:600;color:var(--text-muted)}
-.msg-bubble{border:1px solid var(--border-light);padding:6px 10px;font-size:13px;line-height:1.4;color:var(--text);background:var(--bg)}
+.msg-bubble{border:1px solid var(--border);padding:6px 10px;font-size:13px;line-height:1.4;color:var(--text);background:var(--bg)}
 .msg.me .msg-bubble{background:var(--primary-bg);border-color:var(--primary)}
 .ai-b{border-color:var(--green);border-left:3px solid var(--green)}
 .thinking{font-style:italic;color:var(--text-muted)}
@@ -259,7 +259,7 @@ onUnmounted(()=>{ unsubs.forEach(f=>f()) })
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 
 .input-area{border-top:2px solid var(--border);padding:8px 14px;display:flex;gap:8px;flex-shrink:0;background:var(--bg)}
-.input-area textarea{flex:1;border:1px solid var(--border-light);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;resize:none;min-height:26px;max-height:90px;background:var(--bg);color:var(--text)}
+.input-area textarea{flex:1;border:1px solid var(--border);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;resize:none;min-height:26px;max-height:90px;background:var(--bg);color:var(--text)}
 .input-area textarea:focus{border-color:var(--primary)}
 .btn-send{border:1px solid var(--primary);background:var(--primary);color:#fff;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0}
 .btn-send:disabled{opacity:.4;cursor:not-allowed}
