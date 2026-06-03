@@ -1,48 +1,56 @@
 <template>
-  <div class="app-layout">
-    <Sidebar />
-    <div class="main-area">
-      <div class="chat-header">
-        <button class="btn-back" @click="$router.push('/groups')">&lt; 群</button>
-        <span class="chat-title">{{ groupName }}</span>
-        <span class="chat-sub">{{ memberCount }}人</span>
-        <span class="invite-code">码:{{ inviteCode }}</span>
-        <button class="btn-leave" @click="leaveGroup">x</button>
+  <div class="group-page">
+    <div class="group-header">
+      <button class="back-btn" @click="$router.push('/social')">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="group-info">
+        <span class="group-name">{{ groupName }}</span>
+        <span class="group-meta">{{ memberCount }}人 · {{ inviteCode }}</span>
       </div>
+      <button class="leave-btn" @click="leaveGroup" title="退出群聊">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 1.5H3a.5.5 0 00-.5.5v10a.5.5 0 00.5.5h2M8.5 4l2.5 2.5-2.5 2.5M11 6.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
 
-      <!-- Agent work area — shared, collapsible -->
-      <div v-if="agentActive" class="agent-area" :class="{ fold: agentFold }">
-        <div class="agent-top" @click="agentFold=!agentFold">
-          <span class="adot" :class="{ run:agentRun, ok:agentDone, err:agentErr }"></span>
-          <span class="atitle">{{ agentRun ? (agentAct||'Agent working...') : (agentErr ? 'Error' : 'Done') }}</span>
-          <span class="around" v-if="agentRun && agentRound">{{ agentRound }}/50</span>
-          <span class="aarr">{{ agentFold ? '▸' : '▾' }}</span>
-        </div>
-        <div v-if="!agentFold" class="abody" ref="abodyRef">
-          <div v-for="(e,i) in agentLog" :key="i" :class="['aline', e.type]">
-            <template v-if="e.type==='thinking'"><span class="atxt dim">{{ e.text?.slice(0,150) }}</span></template>
-            <template v-else-if="e.type==='tool_start'"><span class="adots"></span><span class="aact">{{ actMap(e.tool) }}</span><span class="adet">{{ det(e) }}</span></template>
-            <template v-else-if="e.type==='tool_result' && ok(e.result)"><span class="atxt dim">{{ e.result?.slice(0,80) }}</span></template>
-            <template v-else-if="e.type==='error'"><span class="atxt err">{{ e.text }}</span></template>
-            <template v-else-if="e.type==='done'||e.type==='final'"><span class="atxt ok">{{ e.text||'Done.' }}</span></template>
-          </div>
-          <div v-if="agentRun" class="scanbar"></div>
-        </div>
+    <!-- Agent panel -->
+    <div v-if="agentActive" class="agent-panel" :class="{ fold: agentFold }">
+      <div class="agent-top" @click="agentFold = !agentFold">
+        <span class="a-dot" :class="{ run: agentRun, ok: agentDone, err: agentErr }" />
+        <span class="a-title">{{ agentRun ? (agentAct || '处理中...') : (agentErr ? '出错了' : '完成') }}</span>
+        <span class="a-round" v-if="agentRun && agentRound">{{ agentRound }}/50</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="a-arr"><path :d="agentFold ? 'M3 2l4 3-4 3' : 'M2 3l3 4 3-4'" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-
-      <div class="msg-list" ref="msgRef">
-        <div v-if="loading" class="loading">Loading...</div>
-        <div v-for="m in messages" :key="m._key" :class="['msg', m._isAi?'ai':(m._mine?'me':'them')]">
-          <div class="msg-sender">{{ m._isAi?'DS':(m._mine?'我':(m.sender_name||'?')) }}</div>
-          <div class="msg-bubble" :class="{'ai-b':m._isAi}">{{ m.text }}</div>
+      <div v-if="!agentFold" class="agent-body" ref="abodyRef">
+        <div v-for="(e, i) in agentLog" :key="i" class="a-line" :class="e.type">
+          <template v-if="e.type === 'thinking'"><span class="a-txt dim">{{ e.text?.slice(0, 150) }}</span></template>
+          <template v-else-if="e.type === 'tool_start'"><span class="a-dots" /><span class="a-act">{{ actMap(e.tool) }}</span><span class="a-det">{{ det(e) }}</span></template>
+          <template v-else-if="e.type === 'tool_result' && ok(e.result)"><span class="a-txt dim">{{ e.result?.slice(0, 80) }}</span></template>
+          <template v-else-if="e.type === 'error'"><span class="a-txt err">{{ e.text }}</span></template>
+          <template v-else-if="e.type === 'done' || e.type === 'final'"><span class="a-txt ok">{{ e.text || '完成' }}</span></template>
         </div>
-        <div v-if="dsThinking" class="msg ai"><div class="msg-sender">DS</div><div class="msg-bubble ai-b thinking">{{ dsThinking }}</div></div>
-        <div v-if="streamText" class="msg ai"><div class="msg-sender">DS</div><div class="msg-bubble ai-b">{{ streamText }}<span class="cursor"></span></div></div>
+        <div v-if="agentRun" class="a-scan" />
       </div>
+    </div>
 
-      <div class="input-area">
-        <textarea v-model="input" placeholder="@ds 提问或布置任务..." @keydown="onKey" :disabled="sending" rows="1"></textarea>
-        <button class="btn-send" @click="send" :disabled="!input.trim()||sending">发送</button>
+    <!-- Messages -->
+    <div class="group-msgs" ref="msgRef">
+      <div v-if="loading" class="g-loading">加载中...</div>
+      <div v-for="m in messages" :key="m._key" :class="['g-msg', m._isAi ? 'ai' : (m._mine ? 'me' : 'them')]">
+        <div class="g-sender">{{ m._isAi ? 'DS' : (m._mine ? '我' : (m.sender_name || '?')) }}</div>
+        <div class="g-bubble" :class="{ 'ai-b': m._isAi }">{{ m.text }}</div>
+      </div>
+      <div v-if="dsThinking" class="g-msg ai"><div class="g-sender">DS</div><div class="g-bubble ai-b thinking">{{ dsThinking }}</div></div>
+      <div v-if="streamText" class="g-msg ai"><div class="g-sender">DS</div><div class="g-bubble ai-b">{{ streamText }}<span class="cursor" /></div></div>
+    </div>
+
+    <!-- Input -->
+    <div class="group-input">
+      <div class="g-input-row">
+        <textarea v-model="input" placeholder="@ds 提问或布置任务..." @keydown="onKey" :disabled="sending" rows="1" />
+        <button class="g-send" @click="send" :disabled="!input.trim() || sending">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M4 6l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
     </div>
   </div>
@@ -53,216 +61,182 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { groups, getSavedUser } from '../api/index.js'
 import { on as wsOn, send as wsSend } from '../api/ws.js'
-import Sidebar from '../components/Sidebar.vue'
 
-const route=useRoute(), router=useRouter()
-const roomId=route.params.id
-const groupName=ref(''), inviteCode=ref(''), memberCount=ref(0)
-const myId=(getSavedUser()||{}).id||''
-const messages=ref([]), input=ref(''), loading=ref(true), sending=ref(false)
-const streamText=ref(''), dsThinking=ref(''), msgRef=ref(null), abodyRef=ref(null)
-const seenIds=new Set(), unsubs=[]; let _k=0
-function mk() { return 'k_'+ (++_k) }
+const route = useRoute(), router = useRouter()
+const roomId = route.params.id
+const groupName = ref(''), inviteCode = ref(''), memberCount = ref(0)
+const myId = (getSavedUser() || {}).id || ''
+const messages = ref([]), input = ref(''), loading = ref(true), sending = ref(false)
+const streamText = ref(''), dsThinking = ref(''), msgRef = ref(null), abodyRef = ref(null)
+const seenIds = new Set(), unsubs = []
+let _k = 0
+function mk() { return 'k_' + (++_k) }
 
-// Agent state — shared via WS
-const agentActive=ref(false), agentRun=ref(false), agentDone=ref(false), agentErr=ref(false)
-const agentFold=ref(false), agentRound=ref(0), agentAct=ref('')
-const agentLog=ref([]); let _aseen=new Set()
+const agentActive = ref(false), agentRun = ref(false), agentDone = ref(false), agentErr = ref(false)
+const agentFold = ref(false), agentRound = ref(0), agentAct = ref('')
+const agentLog = ref([])
+let _aseen = new Set()
 
 async function load() {
-  try { const g=await groups.detail(roomId); groupName.value=g.name; inviteCode.value=g.invite_code; memberCount.value=g.members?.length||0
-    const ms=await groups.messages(roomId); messages.value=[]; seenIds.clear()
-    for(const m of ms) { const k='h_'+m.id; seenIds.add(k); messages.value.push({...m,_mine:m.sender_id===myId,_isAi:!!m.is_ai,_key:k}) }
-  } catch { groupName.value=roomId } finally { loading.value=false; scrollB() }
+  try {
+    const g = await groups.detail(roomId)
+    groupName.value = g.name; inviteCode.value = g.invite_code; memberCount.value = g.members?.length || 0
+    const ms = await groups.messages(roomId); messages.value = []; seenIds.clear()
+    for (const m of ms) { const k = 'h_' + m.id; seenIds.add(k); messages.value.push({ ...m, _mine: m.sender_id === myId, _isAi: !!m.is_ai, _key: k }) }
+  } catch { groupName.value = roomId }
+  finally { loading.value = false; scrollB() }
 }
-function scrollB() { nextTick(()=>{ const e=msgRef.value; if(e) e.scrollTop=e.scrollHeight }) }
-function scrollA() { nextTick(()=>{ const e=abodyRef.value; if(e) e.scrollTop=e.scrollHeight }) }
+
+function scrollB() { nextTick(() => { const e = msgRef.value; if (e) e.scrollTop = e.scrollHeight }) }
+function scrollA() { nextTick(() => { const e = abodyRef.value; if (e) e.scrollTop = e.scrollHeight }) }
 
 function upsert(m) {
-  const d=(m.sender_id||'ai')+'|'+(m.text||'').slice(0,40)+'|'+(m.created_at||'').slice(0,16)
-  if(seenIds.has(d)) return; seenIds.add(d)
-  messages.value.push({...m,_mine:m.sender_id===myId,_isAi:!!m.is_ai,_key:mk()}); scrollB()
+  const d = (m.sender_id || 'ai') + '|' + (m.text || '').slice(0, 40) + '|' + (m.created_at || '').slice(0, 16)
+  if (seenIds.has(d)) return; seenIds.add(d)
+  messages.value.push({ ...m, _mine: m.sender_id === myId, _isAi: !!m.is_ai, _key: mk() }); scrollB()
 }
 
-// Agent event handler (shared — all members see same events)
 function onAgentEvent(evt) {
-  if(!agentActive.value) { agentActive.value=true; agentRun.value=true; agentDone.value=false; agentErr.value=false; agentFold.value=false; agentLog.value=[]; agentRound.value=0; _aseen=new Set() }
-  const dk=evt.type+'|'+(evt.tool||'')+'|'+(evt.round||'')
-  if(_aseen.has(dk)) return; _aseen.add(dk)
+  if (!agentActive.value) { agentActive.value = true; agentRun.value = true; agentDone.value = false; agentErr.value = false; agentFold.value = false; agentLog.value = []; agentRound.value = 0; _aseen = new Set() }
+  const dk = evt.type + '|' + (evt.tool || '') + '|' + (evt.round || '')
+  if (_aseen.has(dk)) return; _aseen.add(dk)
   agentLog.value.push(evt)
-  if(evt.type==='round') agentRound.value=evt.round
-  if(evt.type==='tool_start') agentAct.value=actMap(evt.tool)
-  if(evt.type==='done'||evt.type==='final') { agentRun.value=false; agentDone.value=true }
-  if(evt.type==='error') { agentRun.value=false; agentErr.value=true }
-  if(evt.type==='aborted') { agentRun.value=false; agentDone.value=true }
+  if (evt.type === 'round') agentRound.value = evt.round
+  if (evt.type === 'tool_start') agentAct.value = actMap(evt.tool)
+  if (evt.type === 'done' || evt.type === 'final') { agentRun.value = false; agentDone.value = true }
+  if (evt.type === 'error') { agentRun.value = false; agentErr.value = true }
+  if (evt.type === 'aborted') { agentRun.value = false; agentDone.value = true }
   scrollA()
 }
+
 function onAgentDone(r) {
-  agentRun.value=false; agentDone.value=true
-  const t='[DS-Agent] '+(r.text||'Done.')
-  messages.value.push({_key:mk(),_mine:false,_isAi:true,room_id:roomId,sender_id:null,sender_name:'DS',text:t,is_ai:1,created_at:new Date().toISOString()})
+  agentRun.value = false; agentDone.value = true
+  messages.value.push({ _key: mk(), _mine: false, _isAi: true, room_id: roomId, sender_id: null, sender_name: 'DS', text: '[DS-Agent] ' + (r.text || '完成'), is_ai: 1, created_at: new Date().toISOString() })
   scrollB()
 }
 
 async function send() {
-  const t=input.value.trim(); if(!t||sending.value) return
-  input.value=''
-  wsSend({type:'group_msg',roomId,text:t,isAi:false})
-
-  const m=t.match(/@ds\s+(.+)/i)
-  if(!m) return
-
-  const task=m[1]; sending.value=true
-  const apiKey=localStorage.getItem('apikey')||''
-
-  // Check API key
-  if(!apiKey) {
-    const errMsg='[DS] 请先在首页设置 DeepSeek API Key'
-    wsSend({type:'group_msg',roomId,text:errMsg,isAi:true})
-    sending.value=false; scrollB(); return
-  }
-
-  // Complex task → Agent; simple → direct reply
+  const t = input.value.trim(); if (!t || sending.value) return
+  input.value = ''
+  wsSend({ type: 'group_msg', roomId, text: t, isAi: false })
+  const m = t.match(/@ds\s+(.+)/i)
+  if (!m) return
+  const task = m[1]; sending.value = true
+  const apiKey = localStorage.getItem('apikey') || ''
+  if (!apiKey) { wsSend({ type: 'group_msg', roomId, text: '[DS] 请先在首页设置 API Key', isAi: true }); sending.value = false; scrollB(); return }
   const complex = task.length > 30 && /写|创建|生成|做|改|项目|代码|帮我|build|create|make|fix|重构|开发|搭建|实现|部署|配置/i.test(task)
-
-  if(complex) {
-    // Start agent immediately — first thinking event becomes the natural acknowledgment
-    dsThinking.value=''; scrollB()
-
+  if (complex) {
+    dsThinking.value = ''; scrollB()
     try {
       const abortCtrl = new AbortController()
-      const r=await fetch('/api/agent/group-run',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+localStorage.getItem('bbot_token'),'x-api-key':apiKey},body:JSON.stringify({task,roomId,model:'deepseek-v4-pro'}),signal:abortCtrl.signal})
-      const reader=r.body.getReader(), dec=new TextDecoder(); let buf=''
-      let firstAck = false
-      while(true) { const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true})
-        const lines=buf.split('\n'); buf=lines.pop()||''
-        for(const l of lines) { if(l.startsWith('data:')) {
-          let evt; try { evt=JSON.parse(l.slice(5).trim()) } catch { continue }
-          onAgentEvent(evt)  // process shown only in top panel
-          // First thinking message = AI-generated acknowledgment in chat
+      const r = await fetch('/api/agent/group-run', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('bbot_token'), 'x-api-key': apiKey }, body: JSON.stringify({ task, roomId, model: 'deepseek-v4-pro' }), signal: abortCtrl.signal })
+      const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '', firstAck = false
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break
+        buf += dec.decode(value, { stream: true }); const lines = buf.split('\n'); buf = lines.pop() || ''
+        for (const l of lines) {
+          if (!l.startsWith('data:')) continue
+          let evt; try { evt = JSON.parse(l.slice(5).trim()) } catch { continue }
+          onAgentEvent(evt)
           if (!firstAck && evt.type === 'thinking' && evt.text) {
-            firstAck = true
-            const ack = evt.text.trim().split(/[。！？\n]/)[0].slice(0, 80)
-            if (ack.length > 2) {
-              wsSend({type:'group_msg',roomId,text:'[DS] '+ack+'… (查看顶部面板)',isAi:true})
-            }
+            firstAck = true; const ack = evt.text.trim().split(/[。！？\n]/)[0].slice(0, 80)
+            if (ack.length > 2) wsSend({ type: 'group_msg', roomId, text: '[DS] ' + ack + '… (查看面板)', isAi: true })
           }
-          // Done → send result to chat
-          if (evt.type === 'done' || evt.type === 'final') {
-            const result = evt.text ? evt.text.slice(0, 200) : '任务完成'
-            wsSend({type:'group_msg',roomId,text:'[DS] '+result,isAi:true})
-          }
-        }}
-      }
-    } catch(e) {
-      if (e.name !== 'AbortError') {
-        wsSend({type:'group_msg',roomId,text:'[DS] Agent 出错: '+e.message,isAi:true})
-      }
-    } finally {
-      sending.value = false
-      scrollB()
-    }
-  } else {
-    // Direct DS reply
-    dsThinking.value='思考中...'; streamText.value=''; scrollB()
-    try {
-      const rMsgs=messages.value.slice(-15).map(x=>({role:x._isAi?'assistant':'user',content:'['+(x._isAi?'DS':(x.sender_name||'?'))+']: '+x.text}))
-      const {ai}=await import('../api/index.js')
-      await ai.chatStream(
-        [{role:'system',content:'你在开发者群聊中。简洁专业地回答问题，用中文。'},...rMsgs,{role:'user',content:task}],
-        'deepseek-v4-flash',
-        (full)=>{streamText.value=full;scrollB()},
-        (full)=>{
-          streamText.value=''; dsThinking.value=''
-          wsSend({type:'group_msg',roomId,text:'[DS] '+full,isAi:true})
-          scrollB(); sending.value=false
-        },
-        (err)=>{
-          streamText.value=''; dsThinking.value=''
-          wsSend({type:'group_msg',roomId,text:'[DS] 出错了: '+err.message,isAi:true})
-          scrollB(); sending.value=false
+          if (evt.type === 'done' || evt.type === 'final') wsSend({ type: 'group_msg', roomId, text: '[DS] ' + (evt.text ? evt.text.slice(0, 200) : '任务完成'), isAi: true })
         }
+      }
+    } catch (e) { if (e.name !== 'AbortError') wsSend({ type: 'group_msg', roomId, text: '[DS] Agent 出错: ' + e.message, isAi: true }) }
+    finally { sending.value = false; scrollB() }
+  } else {
+    dsThinking.value = '思考中...'; streamText.value = ''; scrollB()
+    try {
+      const rMsgs = messages.value.slice(-15).map(x => ({ role: x._isAi ? 'assistant' : 'user', content: '[' + (x._isAi ? 'DS' : (x.sender_name || '?')) + ']: ' + x.text }))
+      const { ai } = await import('../api/index.js')
+      await ai.chatStream(
+        [{ role: 'system', content: '你在开发者群聊中。简洁专业地回答问题，用中文。' }, ...rMsgs, { role: 'user', content: task }],
+        'deepseek-v4-flash',
+        (full) => { streamText.value = full; scrollB() },
+        (full) => { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] ' + full, isAi: true }); scrollB(); sending.value = false },
+        (err) => { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] 出错了: ' + err.message, isAi: true }); scrollB(); sending.value = false }
       )
-    } catch(e) {
-      streamText.value=''; dsThinking.value=''
-      wsSend({type:'group_msg',roomId,text:'[DS] 请求失败: '+e.message,isAi:true})
-      scrollB(); sending.value=false
-    }
+    } catch (e) { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] 请求失败: ' + e.message, isAi: true }); scrollB(); sending.value = false }
   }
-  if(sending.value) sending.value=false
+  if (sending.value) sending.value = false
 }
 
-function onKey(e) { if(e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); send() } }
-async function leaveGroup() { if(!confirm('退出群聊？')) return; try { await groups.leave(roomId); router.push('/groups') } catch(e) { alert(e.message) } }
-
-function actMap(t) { const m={list_files:'Listing...',read_file:'Reading...',write_file:'Writing...',edit_file:'Editing...',glob:'Finding...',grep:'Searching...',run_command:'Running...',web_search:'Searching web...'}; return m[t]||t }
-function det(e) { const a=e.args||{}; return a.path||a.pattern||a.query||a.command?.slice(0,50)||a.dir||'' }
-function ok(r) { return r&&(r.startsWith('[ERROR]')||r.startsWith('[OK]')||r.startsWith('Error')||r.startsWith('[FILE]')||r.length<200) }
+function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
+async function leaveGroup() { if (!confirm('退出群聊？')) return; try { await groups.leave(roomId); router.push('/social') } catch (e) { alert(e.message) } }
+function actMap(t) { return ({ list_files: '列举中...', read_file: '读取中...', write_file: '写入中...', edit_file: '编辑中...', glob: '搜索中...', grep: '查找中...', run_command: '执行中...', web_search: '搜索网络...' })[t] || t }
+function det(e) { const a = e.args || {}; return a.path || a.pattern || a.query || a.command?.slice(0, 50) || a.dir || '' }
+function ok(r) { return r && (r.startsWith('[ERROR]') || r.startsWith('[OK]') || r.startsWith('Error') || r.startsWith('[FILE]') || r.length < 200) }
 
 function setupWS() {
-  unsubs.push(wsOn('group_msg',(m)=>{ if(m.message.room_id===roomId) upsert(m.message) }))
-  unsubs.push(wsOn('agent_progress',(m)=>{ if(m.roomId===roomId&&m.event) onAgentEvent(m.event) }))
-  unsubs.push(wsOn('agent_done',(m)=>{ if(m.roomId===roomId&&m.result) onAgentDone(m.result) }))
+  unsubs.push(wsOn('group_msg', (m) => { if (m.message.room_id === roomId) upsert(m.message) }))
+  unsubs.push(wsOn('agent_progress', (m) => { if (m.roomId === roomId && m.event) onAgentEvent(m.event) }))
+  unsubs.push(wsOn('agent_done', (m) => { if (m.roomId === roomId && m.result) onAgentDone(m.result) }))
 }
-onMounted(()=>{ load(); setupWS() })
-onUnmounted(()=>{ unsubs.forEach(f=>f()) })
+
+onMounted(() => { load(); setupWS() })
+onUnmounted(() => unsubs.forEach(f => f()))
 </script>
 
 <style scoped>
-.app-layout{display:flex;height:100vh;height:100dvh;background:var(--bg);overflow:hidden}
-.main-area{flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;height:100dvh}
-.chat-header{height:48px;padding:0 12px;display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--border);flex-shrink:0;background:var(--bg)}
-.btn-back{border:1px solid var(--border);background:none;color:var(--text-secondary);padding:4px 8px;font-size:11px;cursor:pointer}
-.chat-title{font-size:14px;font-weight:600;color:var(--text);flex:1}
-.chat-sub{font-size:11px;color:var(--text-muted)}
-.invite-code{font-size:9px;color:var(--text-muted);border:1px solid var(--border);padding:2px 6px}
-.btn-leave{border:1px solid var(--red);background:none;color:var(--red);width:22px;height:22px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.btn-leave:hover{background:var(--red);color:#fff}
+.group-page { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+.group-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; height: 52px; }
+.back-btn { width: 32px; height: 32px; border-radius: var(--radius-sm); border: none; background: transparent; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; }
+.back-btn:hover { background: var(--bg3); color: var(--text); }
+.group-info { flex: 1; display: flex; flex-direction: column; }
+.group-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.group-meta { font-size: 11px; color: var(--text3); font-weight: 300; }
+.leave-btn { width: 30px; height: 30px; border-radius: var(--radius-sm); border: none; background: transparent; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; }
+.leave-btn:hover { background: rgba(248,81,73,0.1); color: var(--red); }
 
-/* Agent area */
-.agent-area{border:1px solid var(--green);margin:0 12px;background:var(--bg);font-family:'Cascadia Code','Fira Code',Consolas,monospace;font-size:10px;flex-shrink:0}
-.agent-area.fold{margin-bottom:2px}
-.agent-top{display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border)}
-.agent-top:hover{background:var(--bg-hover)}
-.adot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
-.adot.run{background:var(--green);animation:pulse 1s infinite}
-.adot.ok{background:var(--green)}
-.adot.err{background:var(--red)}
-.atitle{flex:1;font-size:10px;color:var(--text-secondary)}
-.around{font-size:9px;color:var(--text-muted)}
-.aarr{font-size:9px;color:var(--text-muted)}
-.abody{max-height:220px;overflow-y:auto;padding:4px 8px;display:flex;flex-direction:column;gap:1px;position:relative}
-.abody::-webkit-scrollbar{width:3px}
-.abody::-webkit-scrollbar-thumb{background:var(--border)}
-.aline{display:flex;align-items:baseline;gap:4px;line-height:1.35;padding:1px 0}
-.adots{width:3px;height:3px;border-radius:50%;background:var(--primary);flex-shrink:0;margin-top:4px}
-.aact{color:var(--text-secondary);font-weight:500}
-.adet{color:var(--text-muted);font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
-.atxt.dim{color:var(--text-muted);font-size:10px}
-.atxt.err{color:var(--red)}
-.atxt.ok{color:var(--green)}
-.scanbar{height:1px;background:linear-gradient(90deg,transparent,var(--green),transparent);animation:scan .5s ease-in-out infinite;margin-top:3px}
-@keyframes scan{0%{opacity:0;transform:translateX(-100%)}50%{opacity:1}100%{opacity:0;transform:translateX(100%)}}
+/* Agent panel */
+.agent-panel { border: 1px solid var(--border); border-radius: var(--radius); margin: 6px 12px; background: var(--bg2); font-family: var(--font-mono); font-size: 10px; flex-shrink: 0; }
+.agent-panel.fold { margin-bottom: 2px; }
+.agent-top { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer; user-select: none; }
+.agent-top:hover { background: var(--bg3); border-radius: var(--radius) var(--radius) 0 0; }
+.a-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+.a-dot.run { background: var(--green); animation: pulse 1s infinite; }
+.a-dot.ok { background: var(--green); }
+.a-dot.err { background: var(--red); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.a-title { flex: 1; font-size: 11px; color: var(--text2); font-weight: 300; }
+.a-round { font-size: 10px; color: var(--text3); }
+.a-arr { color: var(--text3); flex-shrink: 0; }
+.agent-body { max-height: 200px; overflow-y: auto; padding: 4px 8px; display: flex; flex-direction: column; gap: 1px; border-top: 1px solid var(--border); }
+.a-line { display: flex; align-items: baseline; gap: 4px; line-height: 1.35; padding: 1px 0; }
+.a-dots { width: 3px; height: 3px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 4px; }
+.a-act { color: var(--text2); font-weight: 500; }
+.a-det { color: var(--text3); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.a-txt.dim { color: var(--text3); font-size: 10px; }
+.a-txt.err { color: var(--red); }
+.a-txt.ok { color: var(--green); }
+.a-scan { height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan .5s ease-in-out infinite; margin-top: 3px; }
+@keyframes scan { 0%{opacity:0;transform:translateX(-100%)} 50%{opacity:1} 100%{opacity:0;transform:translateX(100%)} }
 
-.msg-list{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-height:0}
-.loading{text-align:center;font-size:12px;color:var(--text-muted);padding:20px}
-.msg{max-width:75%;display:flex;flex-direction:column;gap:2px}
-.msg.me{align-self:flex-end}
-.msg.them{align-self:flex-start}
-.msg.ai{align-self:flex-start;max-width:85%}
-.msg-sender{font-size:9px;font-weight:600;color:var(--text-muted)}
-.msg-bubble{border:1px solid var(--border);padding:6px 10px;font-size:13px;line-height:1.4;color:var(--text);background:var(--bg)}
-.msg.me .msg-bubble{background:var(--primary-bg);border-color:var(--primary)}
-.ai-b{border-color:var(--green);border-left:3px solid var(--green)}
-.thinking{font-style:italic;color:var(--text-muted)}
-.cursor{display:inline-block;width:5px;height:13px;background:var(--primary);animation:blink .8s infinite;vertical-align:middle}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+/* Messages */
+.group-msgs { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.g-loading { text-align: center; color: var(--text3); font-size: 12px; padding: 20px; font-weight: 300; }
+.g-msg { max-width: 72%; display: flex; flex-direction: column; gap: 2px; }
+.g-msg.me { align-self: flex-end; }
+.g-msg.them { align-self: flex-start; }
+.g-msg.ai { align-self: flex-start; max-width: 82%; }
+.g-sender { font-size: 10px; font-weight: 500; color: var(--text3); padding-left: 2px; }
+.g-bubble { padding: 8px 12px; font-size: 13px; line-height: 1.55; color: var(--text); border-radius: var(--radius-lg); font-weight: 300; word-break: break-word; }
+.g-msg.them .g-bubble { border-bottom-left-radius: 4px; }
+.g-msg.me .g-bubble { background: var(--bg3); border: 1px solid var(--border); border-bottom-right-radius: 4px; }
+.ai-b { border-left: 2px solid var(--accent); background: transparent; border-radius: var(--radius-lg) !important; }
+.thinking { font-style: italic; color: var(--text3); }
+.cursor { display: inline-block; width: 5px; height: 13px; background: var(--accent); animation: blink .8s infinite; vertical-align: middle; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-.input-area{border-top:2px solid var(--border);padding:8px 14px;display:flex;gap:8px;flex-shrink:0;background:var(--bg)}
-.input-area textarea{flex:1;border:1px solid var(--border);padding:7px 10px;font-size:13px;font-family:inherit;outline:none;resize:none;min-height:26px;max-height:90px;background:var(--bg);color:var(--text)}
-.input-area textarea:focus{border-color:var(--primary)}
-.btn-send{border:1px solid var(--primary);background:var(--primary);color:#fff;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0}
-.btn-send:disabled{opacity:.4;cursor:not-allowed}
-
-@media(max-width:768px){.app-layout{position:fixed;top:0;left:0;right:0;bottom:0}.chat-header{padding:0 6px 0 28px;padding-top:env(safe-area-inset-top,0);min-height:44px;gap:4px}.agent-area{margin:0 6px}.abody{max-height:160px}.msg{max-width:88%!important}.input-area{padding:6px 10px;padding-bottom:max(10px,env(safe-area-inset-bottom,0))}.input-area textarea{font-size:15px}}
+/* Input */
+.group-input { padding: 8px 12px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.g-input-row { display: flex; align-items: flex-end; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 8px 6px 14px; }
+.g-input-row textarea { flex: 1; resize: none; border: none; outline: none; background: transparent; color: var(--text); font-size: 14px; font-family: inherit; font-weight: 300; line-height: 1.5; padding: 4px 0; min-height: 22px; max-height: 90px; }
+.g-input-row textarea::placeholder { color: var(--text3); }
+.g-send { width: 30px; height: 30px; border-radius: var(--radius-sm); border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .12s; flex-shrink: 0; }
+.g-send:hover:not(:disabled) { background: var(--accent-hover); }
+.g-send:disabled { background: var(--bg4); color: var(--text3); cursor: not-allowed; }
 </style>

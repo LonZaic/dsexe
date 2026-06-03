@@ -136,10 +136,12 @@ import { ref, computed, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../store/chatStore.js'
 import { isLoggedIn } from '../api/index.js'
+import { useI18n } from '../composables/useI18n.js'
 import ChatView from './ChatView.vue'
 
 const router = useRouter()
 const store = useChatStore()
+const { t } = useI18n()
 const openSettings = inject('openSettings')
 
 const inputText = ref('')
@@ -154,13 +156,13 @@ const userName = computed(() => {
 
 const greeting = computed(() => {
   const h = new Date().getHours()
-  const part = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'
+  const key = h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'
   const name = userName.value
-  return name ? `Good ${part}, ${name}` : `Good ${part}`
+  return name ? `${t(key)}, ${name}` : t(key)
 })
 
-const thinkingLabel = computed(() => ({ low: 'Quick', medium: 'Think', high: 'Deep' })[thinking.value])
-const modelLabel = computed(() => model.value.includes('pro') ? 'V4 Pro' : 'V4 Flash')
+const thinkingLabel = computed(() => ({ low: t('quick'), medium: t('think'), high: t('deep') })[thinking.value])
+const modelLabel = computed(() => model.value.includes('pro') ? t('v4pro') : t('v4flash'))
 const TAB_COLORS = ['#4f7dff', '#7c5cfc', '#3fb950', '#f0883e', '#f85149', '#d2991d']
 
 function tabColor(i) { return TAB_COLORS[i % TAB_COLORS.length] }

@@ -17,19 +17,16 @@ const routes = [
     component: () => import('../pages/LoginView.vue')
   },
   {
-    path: '/friends',
-    name: 'friends',
-    component: () => import('../pages/FriendsView.vue')
+    path: '/social',
+    name: 'social',
+    component: () => import('../pages/SocialView.vue')
   },
+  { path: '/friends', redirect: '/social' },
+  { path: '/groups', redirect: '/social' },
   {
     path: '/dm/:userId',
     name: 'dm',
     component: () => import('../pages/DMView.vue')
-  },
-  {
-    path: '/groups',
-    name: 'groups',
-    component: () => import('../pages/GroupListView.vue')
   },
   {
     path: '/group/:id',
@@ -46,7 +43,7 @@ const router = createRouter({
 // Auth guard — redirect to login if not authenticated for social routes
 router.beforeEach((to, from, next) => {
   const publicRoutes = ['/', '/login']
-  const socialRoutes = ['/friends', '/groups']
+  const socialRoutes = ['/social', '/friends', '/groups']
   const socialPrefixes = ['/dm/', '/group/']
 
   const isSocial = socialRoutes.includes(to.path) ||

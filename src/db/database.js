@@ -1,32 +1,60 @@
 import initSqlJs from 'sql.js'
 
-// Store db on window to survive Vite HMR module reloads
 const DB_KEY = '__sqlite_db__'
 let db = window[DB_KEY] || null
+const DB_NAME = 'ds_sqlite_db'
+const DB_STORE = 'db_data'
 
-const DB_NAME = 'agent_chat.db'
-const STORAGE_KEY = 'sqlite_db'
+if (import.meta.hot) { import.meta.hot.accept(() => {}) }
 
-// Re-save on hot reload
-if (import.meta.hot) {
-    import.meta.hot.accept(() => {})
+// Simple IndexedDB wrapper — unlimited storage, no quota issues
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1)
+    req.onupgradeneeded = () => { req.result.createObjectStore(DB_STORE) }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function idbGet(key) {
+  const idb = await idbOpen()
+  return new Promise((resolve) => {
+    const tx = idb.transaction(DB_STORE, 'readonly')
+    const req = tx.objectStore(DB_STORE).get(key)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => resolve(null)
+  })
+}
+
+async function idbSet(key, value) {
+  const idb = await idbOpen()
+  return new Promise((resolve) => {
+    const tx = idb.transaction(DB_STORE, 'readwrite')
+    tx.objectStore(DB_STORE).put(value, key)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => { console.warn('[DB] IndexedDB write failed, storage may be full'); resolve() }
+  })
 }
 
 export async function initDB() {
-    const SQL = await initSqlJs({
-        locateFile: file => '/sql-wasm.wasm'
-    })
+    const SQL = await initSqlJs({ locateFile: file => '/sql-wasm.wasm' })
 
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
+    // Try IndexedDB first, then fall back to localStorage
+    let saved = await idbGet('db')
+    if (!saved) {
+      const ls = localStorage.getItem('sqlite_db')
+      if (ls) {
+        try { saved = JSON.parse(ls); localStorage.removeItem('sqlite_db') } catch {}
+      }
+    }
+
+    if (saved && saved.length > 0) {
         try {
-            const arr = JSON.parse(saved)
-            db = new SQL.Database(new Uint8Array(arr))
-            // verify DB is healthy
+            db = new SQL.Database(new Uint8Array(saved))
             db.exec('SELECT 1 FROM conversations LIMIT 1')
         } catch {
-            console.warn('SQLite DB corrupted, starting fresh')
-            localStorage.removeItem(STORAGE_KEY)
+            console.warn('[DB] Corrupted, starting fresh')
             db = new SQL.Database()
         }
     } else {
@@ -78,15 +106,10 @@ export async function initDB() {
 function saveDB() {
     if (!db) return
     try {
-        const data = db.export()
-        const json = JSON.stringify(Array.from(data))
-        localStorage.setItem(STORAGE_KEY, json)
+        const data = Array.from(db.export())
+        idbSet('db', data).catch(() => {})
     } catch(e) {
-        console.error('[DB] save failed:', e.message)
-        // If quota exceeded, try to alert user
-        if (e.name === 'QuotaExceededError') {
-            alert('存储空间不足！请清理旧对话或导出数据。')
-        }
+        console.error('[DB] export failed:', e.message)
     }
 }
 
