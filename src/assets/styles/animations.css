@@ -1,0 +1,142 @@
+/* ══════════════════════════════════════
+   DeepSeek-Super Animations
+   ══════════════════════════════════════ */
+
+/* ─── Message appear ─── */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter-active {
+  animation: messageIn 250ms ease both;
+}
+
+/* ─── Text sweep (AI typing indicator) ─── */
+@keyframes textSweep {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.text-sweep {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-glow) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: textSweep 2s ease-in-out infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Panel slide ─── */
+@keyframes panelSlideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes panelSlideOut {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+.panel-enter-active {
+  animation: panelSlideIn var(--transition-panel) both;
+}
+
+.panel-leave-active {
+  animation: panelSlideOut var(--transition-panel) both;
+}
+
+/* ─── Fade ─── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.fade-enter-active { animation: fadeIn var(--transition-base) both; }
+.fade-leave-active { animation: fadeOut var(--transition-base) both; }
+
+/* ─── Pulse (for loading indicators) ─── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+/* ─── Spin ─── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin { animation: spin 0.8s linear infinite; }
+
+/* ─── Scale in (for dropdowns, popovers) ─── */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.scale-enter-active {
+  animation: scaleIn 150ms ease both;
+  transform-origin: top left;
+}
+
+/* ─── Slide up (for bottom sheets) ─── */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.slide-up-enter-active {
+  animation: slideUp var(--transition-slow) ease both;
+}
+
+/* ─── Hover transitions ─── */
+.hover-lift {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.hover-glow {
+  transition: box-shadow var(--transition-base);
+}
+.hover-glow:hover {
+  box-shadow: var(--shadow-glow);
+}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,18 @@
+/* ══════════════════════════════════════
+   Light Theme — component-level adjustments
+   ══════════════════════════════════════ */
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* ─── Code blocks (light mode) ─── */
+[data-theme="light"] pre,
+[data-theme="light"] code {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* ─── Input placeholder ─── */
+[data-theme="light"] ::placeholder {
+  color: var(--text-muted);
+}

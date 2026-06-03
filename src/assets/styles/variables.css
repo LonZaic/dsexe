@@ -1,0 +1,60 @@
+/* ══════════════════════════════════════
+   DeepSeek-Super Design Tokens
+   Claude-inspired dark theme, blue accent
+   ══════════════════════════════════════ */
+
+:root {
+  --accent: #4f7dff;
+  --accent-hover: #6b92ff;
+  --accent-active: #3b5fd9;
+  --accent-muted: rgba(79, 125, 255, 0.10);
+  --accent-glow: rgba(79, 125, 255, 0.20);
+
+  --bg: #1a1916;
+  --bg2: #222220;
+  --bg3: #2a2a27;
+  --bg4: #333330;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #e8e6e0;
+  --text2: #9a9890;
+  --text3: #6a6860;
+
+  --green: #3fb950;
+  --red: #f85149;
+  --yellow: #d2991d;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --radius-lg: 14px;
+  --sidebar-w: 260px;
+
+  --font-sans: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+  --shadow-md: 0 8px 32px rgba(0,0,0,0.5);
+  --z-dropdown: 200;
+  --z-modal: 300;
+}
+
+/* Bridge legacy var names */
+:root {
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--bg2);
+  --bg-tertiary: var(--bg3);
+  --bg-hover: var(--bg3);
+  --bg-active: var(--bg3);
+  --bg-elevated: var(--bg2);
+  --text-primary: var(--text);
+  --text-secondary: var(--text2);
+  --text-muted: var(--text3);
+  --border-light: var(--border);
+  --surface: var(--bg2);
+  --surface-border: var(--border);
+  --surface-hover: var(--bg3);
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-bg: var(--accent-muted);
+}

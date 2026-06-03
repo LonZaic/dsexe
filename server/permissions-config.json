@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "Bash(rm -rf *)": "deny",
+    "Bash(sudo *)": "deny",
+    "Bash(format *)": "deny",
+    "Bash(shutdown *)": "deny",
+    "Bash(reboot *)": "deny",
+    "Bash(dd if=*)": "deny",
+    "Bash(mkfs *)": "deny",
+    "Bash(diskpart *)": "deny",
+    "Bash(del /F /S *)": "deny",
+    "Write(C:\\Windows\\*)": "deny",
+    "Write(/etc/*)": "deny",
+    "Write(/System/*)": "deny",
+    "Edit(C:\\Windows\\*)": "deny",
+    "Edit(/etc/*)": "deny"
+  }
+}
