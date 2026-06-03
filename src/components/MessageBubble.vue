@@ -6,7 +6,7 @@
             <div v-if="role === 'ai' && reasoning" class="thinking-box">
                 <div class="thinking-head" @click="toggleThinking">
                     <span class="thinking-arrow">{{ thinkingOpen ? 'v' : '>' }}</span>
-                    <span class="thinking-label">思考过程</span>
+                    <span class="thinking-label">{{ t('thinkingProcess') }}</span>
                 </div>
                 <div v-if="thinkingOpen" class="thinking-body">{{ reasoning }}</div>
             </div>
@@ -38,7 +38,7 @@
                                     :style="designIframeStyle(d)"
                                 />
                             </div>
-                            <button class="design-export-btn" @click="exportDesign(d, i)" title="导出HTML">导出</button>
+                            <button class="design-export-btn" @click="exportDesign(d, i)" :title="t('export')">{{ t('export') }}</button>
                         </div>
                         <div class="design-device-label">{{ deviceLabel(d) }}</div>
                     </div>
@@ -47,7 +47,7 @@
                 <div v-if="rawText" class="raw-output">
                     <div class="raw-output-head" @click="showRaw = !showRaw">
                         <span class="raw-output-arrow">{{ showRaw ? '▼' : '▶' }}</span>
-                        <span class="raw-output-label">查看生成过程</span>
+                        <span class="raw-output-label">{{ t('viewGenProcess') }}</span>
                     </div>
                     <div v-if="showRaw" class="raw-output-body">{{ rawText }}</div>
                 </div>
@@ -67,7 +67,7 @@
                 <div v-if="rawText" class="raw-output">
                     <div class="raw-output-head" @click="showRaw = !showRaw">
                         <span class="raw-output-arrow">{{ showRaw ? '▼' : '▶' }}</span>
-                        <span class="raw-output-label">查看生成过程</span>
+                        <span class="raw-output-label">{{ t('viewGenProcess') }}</span>
                     </div>
                     <div v-if="showRaw" class="raw-output-body">{{ rawText }}</div>
                 </div>
@@ -119,15 +119,15 @@
 
             <!-- branch version navigator -->
             <div v-if="role === 'ai' && !streaming && siblingCount > 1" class="branch-nav">
-                <button class="branch-btn" title="上一版本" @click="$emit('prevBranch')">&lt;</button>
+                <button class="branch-btn" :title="t('prevVersion')" @click="$emit('prevBranch')">&lt;</button>
                 <span class="branch-num">{{ siblingIndex }}/{{ siblingCount }}</span>
-                <button class="branch-btn" title="下一版本" @click="$emit('nextBranch')">&gt;</button>
+                <button class="branch-btn" :title="t('nextVersion')" @click="$emit('nextBranch')">&gt;</button>
             </div>
             <div class="msg-actions" v-if="!streaming && text">
-                <button v-if="role === 'ai'" title="重新生成" @click="$emit('regenerate')">重</button>
-                <button title="复制" @click="copyText">抄</button>
-                <button v-if="role === 'user'" title="编辑" @click="$emit('edit', text)">改</button>
-                <button title="删除" class="del" @click="$emit('delete')">删</button>
+                <button v-if="role === 'ai'" :title="t('regenerate')" @click="$emit('regenerate')">⟳</button>
+                <button :title="t('copy')" @click="copyText">⎘</button>
+                <button v-if="role === 'user'" :title="t('editMsg')" @click="$emit('edit', text)">✎</button>
+                <button :title="t('delete')" class="del" @click="$emit('delete')">✕</button>
             </div>
         </div>
     </div>
@@ -139,6 +139,9 @@ import { renderMarkdown } from '../utils/markdown.js'
 import { loadFile } from '../utils/fileDB.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { guessDeviceType } from '../utils/designPreview.js'
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const props = defineProps({
     role: { type: String, required: true },
@@ -194,30 +197,30 @@ const agentPhase = computed(() => {
   if (!isAgent.value) return ''
   const evts = props.agentEvents || []
 
-  if (evts.some(e => e.type === 'error')) return '出错了'
-  if (evts.some(e => e.type === 'aborted')) return '已暂停'
-  if (agentDone.value) return 'Complete'
+  if (evts.some(e => e.type === 'error')) return t('agentError')
+  if (evts.some(e => e.type === 'aborted')) return t('agentAborted')
+  if (agentDone.value) return t('agentComplete')
 
   // Use AI's own thinking text as the phase label (first sentence)
   const thinks = [...evts].reverse().filter(e => e.type === 'thinking')
   if (thinks.length > 0) {
-    const t = thinks[thinks.length - 1].text?.trim() || ''
-    const firstSentence = t.split(/[。！？\n.!?]/)[0].trim()
+    const t0 = thinks[thinks.length - 1].text?.trim() || ''
+    const firstSentence = t0.split(/[。！？\n.!?]/)[0].trim()
     if (firstSentence.length > 2 && firstSentence.length < 80) return firstSentence
   }
 
   const last = evts[evts.length - 1]
-  if (!last) return '分析任务...'
-  if (last.type === 'context') return '正在了解项目...'
+  if (!last) return t('agentAnalyzing')
+  if (last.type === 'context') return t('agentUnderstanding')
   if (last.type === 'tool_start') {
     const labels = {
-      list_files: '正在浏览文件...', read_file: '正在读取...', write_file: '正在创建...',
-      edit_file: '正在编辑...', glob: '正在搜索...', grep: '搜索代码中...',
-      run_command: '执行命令中...', web_search: '搜索网络中...',
+      list_files: t('agentBrowsing'), read_file: t('agentReading'), write_file: t('agentWriting'),
+      edit_file: t('agentEditing'), glob: t('agentSearching'), grep: t('agentSearchingCode'),
+      run_command: t('agentRunning'), web_search: t('agentWebSearch'),
     }
-    return labels[last.tool] || '正在处理...'
+    return labels[last.tool] || t('agentProcessing')
   }
-  return '分析任务...'
+  return t('agentAnalyzing')
 })
 
 const agentToolCalls = computed(() => {
@@ -229,7 +232,7 @@ const agentToolCalls = computed(() => {
     if (e.type === 'tool_start') {
       const name = e.tool || ''
       const detail = e.args?.path || e.args?.pattern || e.args?.query || e.args?.command || e.args?.dir || ''
-      const labels = { list_files:'Browse', read_file:'Read', write_file:'Write', edit_file:'Edit', glob:'Search', grep:'Find', run_command:'Run', web_search:'Web' }
+      const labels = { list_files: t('actBrowse'), read_file: t('actRead'), write_file: t('actWrite'), edit_file: t('actEdit'), glob: t('actSearch'), grep: t('actFind'), run_command: t('actRun'), web_search: t('actWeb') }
       steps.push({ label: labels[name]||name, detail, done: true })
       toolIdx++
     }
@@ -286,11 +289,11 @@ const isRealContent = computed(() => {
 })
 
 const phaseLabel = computed(() => {
-    if (props.designProgress >= 100) return '绘制完成'
-    if (props.designProgress >= 50) return '绘制中...'
-    if (props.designProgress >= 20) return '思考完成'
-    if (props.designProgress >= 10) return '思考中...'
-    return '绘制中...'
+    if (props.designProgress >= 100) return t('drawComplete')
+    if (props.designProgress >= 50) return t('drawing')
+    if (props.designProgress >= 20) return t('thinkComplete')
+    if (props.designProgress >= 10) return t('thinkingDots')
+    return t('drawing')
 })
 
 const renderedText = computed(() => {
@@ -300,8 +303,8 @@ const renderedText = computed(() => {
 
 // ─── device helpers ───
 function deviceLabel(d) {
-    const map = { phone: '手机', tablet: '平板', desktop: '电脑' }
-    return map[guessDeviceType(d)] || '设备'
+    const map = { phone: t('phone'), tablet: t('tablet'), desktop: t('desktop') }
+    return map[guessDeviceType(d)] || t('device')
 }
 
 const MAX_PREVIEW_W = 480

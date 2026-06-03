@@ -28,7 +28,7 @@
 
             <!-- Device selector bar -->
             <div v-if="showDeviceBar" class="device-bar">
-                <span class="device-label">Select device:</span>
+                <span class="device-label">{{ t('selectDevice') }}</span>
                 <button
                     v-for="d in DEVICES"
                     :key="d.id"
@@ -46,7 +46,7 @@
                 :web-search="webSearchEnabled"
                 :thinking-depth="thinkingDepth"
                 :model="agentMode ? 'deepseek-v4-pro' : store.model"
-                placeholder="Ask anything, or use / for commands..."
+                :placeholder="t('askPlaceholder')"
                 @send="onInputSend"
                 @stop="stopGeneration"
                 @toggle-web-search="webSearchEnabled = !webSearchEnabled"
@@ -92,6 +92,9 @@ import InputBar from '../components/layout/InputBar.vue'
 import CodePanel from '../components/chat/CodePanel.vue'
 import AppIcon from '../components/common/AppIcon.vue'
 
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useChatStore()

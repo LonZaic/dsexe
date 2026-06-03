@@ -6,9 +6,9 @@
       </button>
       <div class="group-info">
         <span class="group-name">{{ groupName }}</span>
-        <span class="group-meta">{{ memberCount }}人 · {{ inviteCode }}</span>
+        <span class="group-meta">{{ memberCount }}{{ t('members') }} · {{ inviteCode }}</span>
       </div>
-      <button class="leave-btn" @click="leaveGroup" title="退出群聊">
+      <button class="leave-btn" @click="leaveGroup" :title="t('leaveGroup')">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 1.5H3a.5.5 0 00-.5.5v10a.5.5 0 00.5.5h2M8.5 4l2.5 2.5-2.5 2.5M11 6.5H4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
@@ -17,7 +17,7 @@
     <div v-if="agentActive" class="agent-panel" :class="{ fold: agentFold }">
       <div class="agent-top" @click="agentFold = !agentFold">
         <span class="a-dot" :class="{ run: agentRun, ok: agentDone, err: agentErr }" />
-        <span class="a-title">{{ agentRun ? (agentAct || '处理中...') : (agentErr ? '出错了' : '完成') }}</span>
+        <span class="a-title">{{ agentRun ? (agentAct || t('agentProcessing')) : (agentErr ? t('agentError') : t('agentComplete')) }}</span>
         <span class="a-round" v-if="agentRun && agentRound">{{ agentRound }}/50</span>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="a-arr"><path :d="agentFold ? 'M3 2l4 3-4 3' : 'M2 3l3 4 3-4'" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -27,7 +27,7 @@
           <template v-else-if="e.type === 'tool_start'"><span class="a-dots" /><span class="a-act">{{ actMap(e.tool) }}</span><span class="a-det">{{ det(e) }}</span></template>
           <template v-else-if="e.type === 'tool_result' && ok(e.result)"><span class="a-txt dim">{{ e.result?.slice(0, 80) }}</span></template>
           <template v-else-if="e.type === 'error'"><span class="a-txt err">{{ e.text }}</span></template>
-          <template v-else-if="e.type === 'done' || e.type === 'final'"><span class="a-txt ok">{{ e.text || '完成' }}</span></template>
+          <template v-else-if="e.type === 'done' || e.type === 'final'"><span class="a-txt ok">{{ e.text || t('agentComplete') }}</span></template>
         </div>
         <div v-if="agentRun" class="a-scan" />
       </div>
@@ -35,19 +35,19 @@
 
     <!-- Messages -->
     <div class="group-msgs" ref="msgRef">
-      <div v-if="loading" class="g-loading">加载中...</div>
+      <div v-if="loading" class="g-loading">{{ t('loading') }}</div>
       <div v-for="m in messages" :key="m._key" :class="['g-msg', m._isAi ? 'ai' : (m._mine ? 'me' : 'them')]">
-        <div class="g-sender">{{ m._isAi ? 'DS' : (m._mine ? '我' : (m.sender_name || '?')) }}</div>
+        <div class="g-sender">{{ m._isAi ? t('dsAiName') : (m._mine ? t('tagMe') : (m.sender_name || '?')) }}</div>
         <div class="g-bubble" :class="{ 'ai-b': m._isAi }">{{ m.text }}</div>
       </div>
-      <div v-if="dsThinking" class="g-msg ai"><div class="g-sender">DS</div><div class="g-bubble ai-b thinking">{{ dsThinking }}</div></div>
-      <div v-if="streamText" class="g-msg ai"><div class="g-sender">DS</div><div class="g-bubble ai-b">{{ streamText }}<span class="cursor" /></div></div>
+      <div v-if="dsThinking" class="g-msg ai"><div class="g-sender">{{ t('dsAiName') }}</div><div class="g-bubble ai-b thinking">{{ dsThinking }}</div></div>
+      <div v-if="streamText" class="g-msg ai"><div class="g-sender">{{ t('dsAiName') }}</div><div class="g-bubble ai-b">{{ streamText }}<span class="cursor" /></div></div>
     </div>
 
     <!-- Input -->
     <div class="group-input">
       <div class="g-input-row">
-        <textarea v-model="input" placeholder="@ds 提问或布置任务..." @keydown="onKey" :disabled="sending" rows="1" />
+        <textarea v-model="input" :placeholder="t('dmPlaceholder')" @keydown="onKey" :disabled="sending" rows="1" />
         <button class="g-send" @click="send" :disabled="!input.trim() || sending">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M4 6l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -61,6 +61,9 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { groups, getSavedUser } from '../api/index.js'
 import { on as wsOn, send as wsSend } from '../api/ws.js'
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const route = useRoute(), router = useRouter()
 const roomId = route.params.id
@@ -116,14 +119,14 @@ function onAgentDone(r) {
 }
 
 async function send() {
-  const t = input.value.trim(); if (!t || sending.value) return
+  const txt = input.value.trim(); if (!txt || sending.value) return
   input.value = ''
-  wsSend({ type: 'group_msg', roomId, text: t, isAi: false })
-  const m = t.match(/@ds\s+(.+)/i)
+  wsSend({ type: 'group_msg', roomId, text: txt, isAi: false })
+  const m = txt.match(/@ds\s+(.+)/i)
   if (!m) return
   const task = m[1]; sending.value = true
   const apiKey = localStorage.getItem('apikey') || ''
-  if (!apiKey) { wsSend({ type: 'group_msg', roomId, text: '[DS] 请先在首页设置 API Key', isAi: true }); sending.value = false; scrollB(); return }
+  if (!apiKey) { wsSend({ type: 'group_msg', roomId, text: '[DS] ' + t('apiNotSetMsg'), isAi: true }); sending.value = false; scrollB(); return }
   const complex = task.length > 30 && /写|创建|生成|做|改|项目|代码|帮我|build|create|make|fix|重构|开发|搭建|实现|部署|配置/i.test(task)
   if (complex) {
     dsThinking.value = ''; scrollB()
@@ -140,33 +143,33 @@ async function send() {
           onAgentEvent(evt)
           if (!firstAck && evt.type === 'thinking' && evt.text) {
             firstAck = true; const ack = evt.text.trim().split(/[。！？\n]/)[0].slice(0, 80)
-            if (ack.length > 2) wsSend({ type: 'group_msg', roomId, text: '[DS] ' + ack + '… (查看面板)', isAi: true })
+            if (ack.length > 2) wsSend({ type: 'group_msg', roomId, text: '[DS] ' + ack + '… ' + t('viewPanel'), isAi: true })
           }
-          if (evt.type === 'done' || evt.type === 'final') wsSend({ type: 'group_msg', roomId, text: '[DS] ' + (evt.text ? evt.text.slice(0, 200) : '任务完成'), isAi: true })
+          if (evt.type === 'done' || evt.type === 'final') wsSend({ type: 'group_msg', roomId, text: '[DS] ' + (evt.text ? evt.text.slice(0, 200) : t('agentDoneMsg')), isAi: true })
         }
       }
-    } catch (e) { if (e.name !== 'AbortError') wsSend({ type: 'group_msg', roomId, text: '[DS] Agent 出错: ' + e.message, isAi: true }) }
+    } catch (e) { if (e.name !== 'AbortError') wsSend({ type: 'group_msg', roomId, text: '[DS] ' + t('agentErrorMsg') + ': ' + e.message, isAi: true }) }
     finally { sending.value = false; scrollB() }
   } else {
-    dsThinking.value = '思考中...'; streamText.value = ''; scrollB()
+    dsThinking.value = t('dsThinking'); streamText.value = ''; scrollB()
     try {
-      const rMsgs = messages.value.slice(-15).map(x => ({ role: x._isAi ? 'assistant' : 'user', content: '[' + (x._isAi ? 'DS' : (x.sender_name || '?')) + ']: ' + x.text }))
+      const rMsgs = messages.value.slice(-15).map(x => ({ role: x._isAi ? 'assistant' : 'user', content: '[' + (x._isAi ? t('dsAiName') : (x.sender_name || '?')) + ']: ' + x.text }))
       const { ai } = await import('../api/index.js')
       await ai.chatStream(
-        [{ role: 'system', content: '你在开发者群聊中。简洁专业地回答问题，用中文。' }, ...rMsgs, { role: 'user', content: task }],
+        [{ role: 'system', content: t('systemPromptGroup') }, ...rMsgs, { role: 'user', content: task }],
         'deepseek-v4-flash',
         (full) => { streamText.value = full; scrollB() },
         (full) => { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] ' + full, isAi: true }); scrollB(); sending.value = false },
-        (err) => { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] 出错了: ' + err.message, isAi: true }); scrollB(); sending.value = false }
+        (err) => { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] ' + t('somethingWrong') + ': ' + err.message, isAi: true }); scrollB(); sending.value = false }
       )
-    } catch (e) { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] 请求失败: ' + e.message, isAi: true }); scrollB(); sending.value = false }
+    } catch (e) { streamText.value = ''; dsThinking.value = ''; wsSend({ type: 'group_msg', roomId, text: '[DS] ' + t('requestFailed') + ': ' + e.message, isAi: true }); scrollB(); sending.value = false }
   }
   if (sending.value) sending.value = false
 }
 
 function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
-async function leaveGroup() { if (!confirm('退出群聊？')) return; try { await groups.leave(roomId); router.push('/social') } catch (e) { alert(e.message) } }
-function actMap(t) { return ({ list_files: '列举中...', read_file: '读取中...', write_file: '写入中...', edit_file: '编辑中...', glob: '搜索中...', grep: '查找中...', run_command: '执行中...', web_search: '搜索网络...' })[t] || t }
+async function leaveGroup() { if (!confirm(t('leaveConfirm'))) return; try { await groups.leave(roomId); router.push('/social') } catch (e) { alert(e.message) } }
+function actMap(tool) { return ({ list_files: t('actListing'), read_file: t('actReading'), write_file: t('actWriting'), edit_file: t('actEditing'), glob: t('actFinding'), grep: t('actSearching'), run_command: t('actRunning'), web_search: t('actWebSearching') })[tool] || tool }
 function det(e) { const a = e.args || {}; return a.path || a.pattern || a.query || a.command?.slice(0, 50) || a.dir || '' }
 function ok(r) { return r && (r.startsWith('[ERROR]') || r.startsWith('[OK]') || r.startsWith('Error') || r.startsWith('[FILE]') || r.length < 200) }
 

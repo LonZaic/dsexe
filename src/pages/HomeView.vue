@@ -10,7 +10,7 @@
           :style="{ borderColor: tabColor(i) }"
           @click="switchTab(tab.id)"
         >
-          <span class="tab-title">{{ tab.title || 'New Chat' }}</span>
+          <span class="tab-title">{{ tab.title || t('newChatTab') }}</span>
           <button class="tab-close" @click.stop="closeTab(tab.id)">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
@@ -41,23 +41,23 @@
             <circle cx="11" cy="8.5" r="1.5" fill="currentColor" opacity="0.5"/>
             <path d="M6 12h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
           </svg>
-          <div class="feature-card-title">Agent Mode</div>
-          <div class="feature-card-desc">Read, write, search, run commands — full autonomy</div>
+          <div class="feature-card-title">{{ t('agentMode') }}</div>
+          <div class="feature-card-desc">{{ t('agentModeDesc') }}</div>
         </div>
         <div class="feature-card" @click="openFeature('design')">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <rect x="1" y="1" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.3"/>
             <path d="M1 6h16M5 6v11" stroke="currentColor" stroke-width="1.3"/>
           </svg>
-          <div class="feature-card-title">Live Preview</div>
-          <div class="feature-card-desc">HTML/CSS/JS designs rendered in real-time</div>
+          <div class="feature-card-title">{{ t('livePreview') }}</div>
+          <div class="feature-card-desc">{{ t('livePreviewDesc') }}</div>
         </div>
         <div class="feature-card" @click="openFeature('code')">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M5 5L2 9l3 4M13 5l3 4-3 4M10 3l-2 12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <div class="feature-card-title">Code Panel</div>
-          <div class="feature-card-desc">Syntax-highlighted code with copy, download, preview</div>
+          <div class="feature-card-title">{{ t('codePanel') }}</div>
+          <div class="feature-card-desc">{{ t('codePanelDesc') }}</div>
         </div>
         <div class="feature-card" @click="$router.push('/groups')">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -66,8 +66,8 @@
             <path d="M1 14c0-2.4 2-4.5 5-4.5s5 2.1 5 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
             <path d="M12 8.5c1.8 0 3.5 1.3 3.5 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <div class="feature-card-title">Group Chat</div>
-          <div class="feature-card-desc">Multi-agent collaboration in shared spaces</div>
+          <div class="feature-card-title">{{ t('groupChatTitle') }}</div>
+          <div class="feature-card-desc">{{ t('groupChatDesc') }}</div>
         </div>
         <div class="feature-card" @click="openSettings('api')">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -75,16 +75,16 @@
             <circle cx="14" cy="12" r="3" stroke="currentColor" stroke-width="1.3"/>
             <path d="M16.5 14.5l1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <div class="feature-card-title">API Key</div>
-          <div class="feature-card-desc">Manage your DeepSeek API credentials</div>
+          <div class="feature-card-title">{{ t('apiCard') }}</div>
+          <div class="feature-card-desc">{{ t('apiCardDesc') }}</div>
         </div>
         <div class="feature-card" @click="openSettings('email')">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <rect x="2" y="4" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.3"/>
             <path d="M2 6.5l7 4.5 7-4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <div class="feature-card-title">Email</div>
-          <div class="feature-card-desc">SMTP notifications on your local disk</div>
+          <div class="feature-card-title">{{ t('emailCard') }}</div>
+          <div class="feature-card-desc">{{ t('emailCardDesc') }}</div>
         </div>
       </div>
 
@@ -94,7 +94,7 @@
           <textarea
             ref="textareaRef"
             v-model="inputText"
-            placeholder="Ask anything, or type / for commands..."
+            :placeholder="t('askPlaceholder')"
             @keydown="onKey"
             @input="autoResize"
             rows="1"
@@ -103,7 +103,7 @@
             <div class="toolbar-left">
               <button class="tool-btn" @click="quickStart('agent')">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                Agent
+                {{ t('agent') }}
               </button>
               <button class="tool-btn" :class="{ active: thinking !== 'medium' }" @click="cycleThinking">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3v3.5L9 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>

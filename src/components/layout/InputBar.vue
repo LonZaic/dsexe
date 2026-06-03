@@ -37,7 +37,7 @@
         <button
           v-if="isRunning"
           class="btn-stop"
-          title="Stop generation"
+          :title="t('stopGen')"
           @click="$emit('stop')"
         >
           <AppIcon name="stop" :size="14" />
@@ -48,7 +48,7 @@
           v-else
           :class="['btn-send', { disabled: !canSend }]"
           :disabled="!canSend"
-          title="Send message"
+          :title="t('sendMsg')"
           @click="send"
         >
           <AppIcon name="send" :size="16" />
@@ -64,7 +64,7 @@
           <button
             ref="plusBtnRef"
             class="toolbar-btn"
-            title="Add context"
+            :title="t('addContext')"
             @click="showPlusMenu = !showPlusMenu"
           >
             <AppIcon name="plus" :size="18" />
@@ -74,15 +74,15 @@
             <div v-if="showPlusMenu" class="plus-menu" @click.stop>
               <button class="plus-menu-item" @click="handleAction('file')">
                 <AppIcon name="file" :size="16" />
-                <span>Upload file</span>
+                <span>{{ t('uploadFile') }}</span>
               </button>
               <button class="plus-menu-item" @click="handleAction('image')">
                 <AppIcon name="image" :size="16" />
-                <span>Screenshot</span>
+                <span>{{ t('screenshot') }}</span>
               </button>
               <button class="plus-menu-item" @click="handleAction('github')">
                 <AppIcon name="github" :size="16" />
-                <span>Connect GitHub</span>
+                <span>{{ t('connectGithub') }}</span>
               </button>
             </div>
           </Transition>
@@ -91,11 +91,11 @@
         <!-- Web Search toggle -->
         <button
           :class="['toolbar-btn', 'toggle-btn', { active: webSearch }]"
-          title="Web search"
+          :title="t('webSearch')"
           @click="$emit('toggle-web-search')"
         >
           <AppIcon name="globe" :size="16" />
-          <span class="toggle-label">Search</span>
+          <span class="toggle-label">{{ t('webSearch') }}</span>
         </button>
       </div>
 
@@ -104,7 +104,7 @@
         <div class="toolbar-group">
           <button
             class="toolbar-btn thinking-btn"
-            title="Thinking depth"
+            :title="t('thinkingDepth')"
             @click="cycleThinking"
           >
             <AppIcon name="lightbulb" :size="16" />
@@ -115,7 +115,7 @@
         <!-- Model selector -->
         <button
           class="toolbar-btn model-btn"
-          title="Change model"
+          :title="t('changeModel')"
           @click="$emit('toggle-model-menu')"
         >
           <span class="model-indicator" />
@@ -139,10 +139,13 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppIcon from '../common/AppIcon.vue'
+import { useI18n } from '../../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: 'Ask anything, or use / for commands...' },
+  placeholder: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
   isRunning: { type: Boolean, default: false },
   files: { type: Array, default: () => [] },
@@ -177,13 +180,13 @@ const fileInput = ref(null)
 const plusBtnRef = ref(null)
 
 const thinkingLabel = computed(() => {
-  const map = { low: 'Quick', medium: 'Think', high: 'Deep' }
-  return map[props.thinkingDepth] || 'Think'
+  const map = { low: t('quick'), medium: t('think'), high: t('deep') }
+  return map[props.thinkingDepth] || t('think')
 })
 
 const modelLabel = computed(() => {
-  if (props.model.includes('flash')) return 'V4-Flash'
-  if (props.model.includes('pro')) return 'V4-Pro'
+  if (props.model.includes('flash')) return t('v4flash')
+  if (props.model.includes('pro')) return t('v4pro')
   return 'V4'
 })
 

@@ -11,31 +11,31 @@
             @click="activeTab = i"
           >
             <AppIcon :name="tabIcon(tab.language)" :size="14" />
-            <span class="tab-name">{{ tab.filename || `Code ${i + 1}` }}</span>
+            <span class="tab-name">{{ tab.filename || t('codeN') + ' ' + (i + 1) }}</span>
             <span class="tab-lang">{{ tab.language }}</span>
           </button>
         </div>
 
         <div class="panel-actions">
-          <button class="panel-action-btn" title="Copy code" @click="copyCode">
+          <button class="panel-action-btn" :title="t('copyCode')" @click="copyCode">
             <AppIcon v-if="!copied" name="copy" :size="16" />
             <AppIcon v-else name="check" :size="16" />
           </button>
-          <button class="panel-action-btn" title="Download file" @click="downloadCode">
+          <button class="panel-action-btn" :title="t('downloadFile')" @click="downloadCode">
             <AppIcon name="download" :size="16" />
           </button>
           <button
             v-if="hasPreview"
             class="panel-action-btn"
-            :title="showPreview ? 'Show code' : 'Preview'"
+            :title="showPreview ? t('showCode') : t('previewCode')"
             @click="showPreview = !showPreview"
           >
             <AppIcon :name="showPreview ? 'code' : 'play'" :size="16" />
           </button>
-          <button class="panel-action-btn" title="Expand" @click="isExpanded = !isExpanded">
+          <button class="panel-action-btn" :title="t('expand')" @click="isExpanded = !isExpanded">
             <AppIcon :name="isExpanded ? 'panel-close' : 'panel-right'" :size="16" />
           </button>
-          <button class="panel-action-btn panel-close-btn" title="Close" @click="$emit('close')">
+          <button class="panel-action-btn panel-close-btn" :title="t('close')" @click="$emit('close')">
             <AppIcon name="x" :size="16" />
           </button>
         </div>
@@ -67,7 +67,7 @@
 
       <!-- Footer -->
       <div class="panel-footer">
-        <span class="footer-info">{{ currentTab?.language }} &middot; {{ codeLines }} lines</span>
+        <span class="footer-info">{{ currentTab?.language }} &middot; {{ codeLines }} {{ t('linesUnit') }}</span>
       </div>
     </div>
   </Transition>
@@ -76,6 +76,9 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import AppIcon from '../common/AppIcon.vue'
+import { useI18n } from '../../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const props = defineProps({
   visible: { type: Boolean, default: false },

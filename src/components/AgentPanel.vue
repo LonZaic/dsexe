@@ -2,7 +2,7 @@
   <div v-if="visible" class="agent-panel" :class="{ collapsed }">
     <div class="agent-header" @click="collapsed = !collapsed">
       <span class="dot" :class="{ run: running, ok: done, err: error }"></span>
-      <span class="title">{{ running ? (action || '处理中...') : (error ? 'Error' : (done ? 'Complete' : 'Agent')) }}</span>
+      <span class="title">{{ running ? (action || t('agentProcessing')) : (error ? t('agentError') : (done ? t('agentComplete') : t('agent'))) }}</span>
       <span class="timer" v-if="running && elapsed > 0">{{ formatTime(elapsed) }}</span>
       <span class="timer done" v-else-if="done && elapsed > 0">{{ formatTime(elapsed) }}</span>
       <span class="stats" v-if="running && rounds">{{ rounds }}/{{ maxR }}</span>
@@ -22,37 +22,37 @@
           <span class="txt dim">{{ e.result?.slice(0, 100) }}</span>
         </template>
         <template v-else-if="e.type === 'permission_denied'">
-          <span class="txt err">Error:  {{ e.text }}</span>
+          <span class="txt err">{{ t('agentError') }}: {{ e.text }}</span>
         </template>
         <template v-else-if="e.type === 'hook_blocked'">
-          <span class="txt warn">Blocked: {{ e.text }}</span>
+          <span class="txt warn">{{ t('agentBlocked') }}: {{ e.text }}</span>
         </template>
         <template v-else-if="e.type === 'compact_start'">
-          <span class="txt dim">Compacting...</span>
+          <span class="txt dim">{{ t('agentCompacting') }}</span>
         </template>
         <template v-else-if="e.type === 'compact_done'">
-          <span class="txt dim">Compaction done</span>
+          <span class="txt dim">{{ t('agentCompacted') }}</span>
         </template>
         <template v-else-if="e.type === 'budget_warning'">
-          <span class="txt warn">Budget: {{ e.text }}</span>
+          <span class="txt warn">{{ t('agentBudget') }}: {{ e.text }}</span>
         </template>
         <template v-else-if="e.type === 'memory_found'">
-          <span class="txt dim">Think: {{ e.text }}</span>
+          <span class="txt dim">{{ t('agentMemoryFound') }}: {{ e.text }}</span>
         </template>
         <template v-else-if="e.type === 'memory_extracted'">
-          <span class="txt ok">Memory: {{ e.text }}</span>
+          <span class="txt ok">{{ t('agentMemorySaved') }}: {{ e.text }}</span>
         </template>
         <template v-else-if="e.type === 'loop_warning'">
-          <span class="txt warn">Loop:  {{ e.text?.slice(0, 100) }}</span>
+          <span class="txt warn">{{ t('agentLoop') }}: {{ e.text?.slice(0, 100) }}</span>
         </template>
         <template v-else-if="e.type === 'stats'">
-          <span class="txt dim">Rounds: {{ e.rounds }} | Hooks: {{ e.hooksFired }} | Memories: {{ e.memoriesFound }}</span>
+          <span class="txt dim">{{ t('agentRounds') }}: {{ e.rounds }} | {{ t('agentHooks') }}: {{ e.hooksFired }} | {{ t('agentMemories') }}: {{ e.memoriesFound }}</span>
         </template>
         <template v-else-if="e.type === 'error'">
           <span class="txt err">{{ e.text }}</span>
         </template>
         <template v-else-if="e.type === 'done' || e.type === 'final'">
-          <span class="txt ok">{{ e.text || 'Done.' }}</span>
+          <span class="txt ok">{{ e.text || t('agentDone') }}</span>
         </template>
       </div>
       <div v-if="running" class="scan-line"></div>
@@ -62,6 +62,9 @@
 
 <script setup>
 import { ref, watch, nextTick } from 'vue'
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 const props = defineProps({ visible: Boolean, events: Array })
 defineEmits(['close'])
 
@@ -104,7 +107,7 @@ function start() { entries.value=[]; rounds.value=0; running.value=true; done.va
 function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null } }
 function formatTime(ms) { const s=Math.floor(ms/1000); if(s<60) return s+'s'; const m=Math.floor(s/60); return m+'m'+(s%60)+'s' }
 
-function actLabel(t) { const m={list_files:'Listing...',read_file:'Reading...',write_file:'Writing...',edit_file:'Editing...',glob:'Finding...',grep:'Searching...',run_command:'Running...',web_search:'Searching web...',search_code:'Searching...'}; return m[t]||t }
+function actLabel(tool) { const m={list_files: t('actListing'),read_file: t('actReading'),write_file: t('actWriting'),edit_file: t('actEditing'),glob: t('actFinding'),grep: t('actSearching'),run_command: t('actRunning'),web_search: t('actWebSearching'),search_code: t('actSearching')}; return m[tool]||tool }
 function detail(e) { const a=e.args||{}; return a.path||a.pattern||a.query||a.command?.slice(0,50)||a.dir||'' }
 function showResult(r) { return r && (r.startsWith('[ERROR]')||r.startsWith('[OK]')||r.startsWith('Error')||r.startsWith('[FILE]')||r.length<200) }
 defineExpose({ start })

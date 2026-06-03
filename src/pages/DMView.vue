@@ -7,12 +7,12 @@
       <div class="dm-avatar" :class="{ online: friendStatus === 'online' }">{{ friendName.charAt(0) }}</div>
       <div class="dm-info">
         <span class="dm-name">{{ friendName }}</span>
-        <span class="dm-status">{{ friendStatus === 'online' ? '在线' : '离线' }}</span>
+        <span class="dm-status">{{ friendStatus === 'online' ? t('online') : t('offline') }}</span>
       </div>
     </div>
 
     <div class="dm-messages" ref="msgListRef">
-      <div v-if="loading" class="dm-loading">加载中...</div>
+      <div v-if="loading" class="dm-loading">{{ t('loading') }}</div>
       <div v-for="msg in messages" :key="msg._key" :class="['dm-msg', msg._mine ? 'mine' : 'theirs']">
         <div class="dm-bubble" :class="{ ai: msg._isAi }">{{ msg.text }}</div>
       </div>
@@ -23,7 +23,7 @@
 
     <div class="dm-input-area">
       <div class="dm-input-row">
-        <textarea v-model="inputText" placeholder="输入消息，@ds 提问..." @keydown="onKeydown" rows="1" :disabled="sending" />
+        <textarea v-model="inputText" :placeholder="t('dmPlaceholder')" @keydown="onKeydown" rows="1" :disabled="sending" />
         <button class="dm-send" @click="sendMessage" :disabled="!inputText.trim() || sending">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M4 6l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -37,6 +37,9 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { dm, friends, getSavedUser } from '../api/index.js'
 import { on as wsOn, send as wsSend } from '../api/ws.js'
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const friendId = route.params.userId
@@ -88,10 +91,10 @@ async function sendMessage() {
   if (dsMatch) {
     sending.value = true; streamingText.value = ''
     try {
-      const recent = messages.value.slice(-10).map(m => ({ role: m._mine ? 'user' : 'assistant', content: `[${m._mine ? '我' : friendName.value}]: ${m.text}` }))
+      const recent = messages.value.slice(-10).map(m => ({ role: m._mine ? 'user' : 'assistant', content: `[${m._mine ? t('tagMe') : friendName.value}]: ${m.text}` }))
       const { ai: aiApi } = await import('../api/index.js')
       await aiApi.chatStream(
-        [{ role: 'system', content: '你在一个私聊对话中。根据上下文回答，简洁有用。' }, ...recent, { role: 'user', content: dsMatch[1] }],
+        [{ role: 'system', content: t('systemPrompt') }, ...recent, { role: 'user', content: dsMatch[1] }],
         'deepseek-v4-flash',
         (full) => { streamingText.value = full; scrollB() },
         (full) => {
@@ -101,8 +104,8 @@ async function sendMessage() {
         },
         (err) => {
           streamingText.value = ''
-          messages.value.push({ _key: mk(), _mine: false, _isAi: true, sender_id: null, receiver_id: friendId, text: '[DS] 请求失败: ' + err.message, ai_reply: null, created_at: new Date().toISOString() })
-          wsSend({ type: 'dm', to: friendId, text: '[DS] 出了点问题: ' + err.message, aiReply: null }); scrollB(); sending.value = false
+          messages.value.push({ _key: mk(), _mine: false, _isAi: true, sender_id: null, receiver_id: friendId, text: '[DS] ' + t('requestFailed') + ': ' + err.message, ai_reply: null, created_at: new Date().toISOString() })
+          wsSend({ type: 'dm', to: friendId, text: '[DS] ' + t('somethingWrong') + ': ' + err.message, aiReply: null }); scrollB(); sending.value = false
         }
       )
     } catch { streamingText.value = '[DS 请求失败]'; sending.value = false }

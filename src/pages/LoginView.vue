@@ -8,13 +8,13 @@
         </svg>
       </div>
       <h1>DeepSeek-Super</h1>
-      <p class="subtitle">{{ isRegister ? 'Create your local account' : 'Sign in to your workspace' }}</p>
-      <p class="sub-hint">All data stored securely on your disk. No cloud, no tracking.</p>
+      <p class="subtitle">{{ isRegister ? t('registerSub') : t('loginSub') }}</p>
+      <p class="sub-hint">{{ t('loginHint') }}</p>
 
       <div class="form">
         <input
           v-model="name"
-          placeholder="Username"
+          :placeholder="t('username')"
           maxlength="20"
           @keydown.enter="submit"
           autofocus
@@ -22,14 +22,14 @@
         <input
           v-model="password"
           type="password"
-          placeholder="Password"
+          :placeholder="t('password')"
           @keydown.enter="submit"
         />
         <button class="form-btn" @click="submit" :disabled="loading">
-          {{ loading ? 'Please wait...' : (isRegister ? 'Create account' : 'Sign in') }}
+          {{ loading ? t('pleaseWait') : (isRegister ? t('createAccount') : t('loginBtn')) }}
         </button>
         <button class="form-btn-outline" @click="isRegister = !isRegister">
-          {{ isRegister ? 'Already have an account? Sign in' : 'No account? Create one' }}
+          {{ isRegister ? t('toLogin') : t('toRegister') }}
         </button>
         <p v-if="error" class="error">{{ error }}</p>
       </div>
@@ -42,6 +42,9 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth, saveAuth } from '../api/index.js'
 import { connect } from '../api/ws.js'
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const name = ref('')
@@ -53,7 +56,7 @@ const error = ref('')
 async function submit() {
   error.value = ''
   if (!name.value.trim() || !password.value) {
-    error.value = 'Please enter your username and password'
+    error.value = t('loginError')
     return
   }
   loading.value = true

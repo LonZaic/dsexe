@@ -9,8 +9,8 @@
 
       <!-- API Key -->
       <template v-if="currentTab === 'api'">
-        <h2>API Key</h2>
-        <p class="sub">Enter your DeepSeek API key to start using the agent and AI features.</p>
+        <h2>{{ t('apiModalTitle') }}</h2>
+        <p class="sub">{{ t('apiModalSub') }}</p>
         <div class="form-group">
           <label class="form-label">API Key</label>
           <div class="api-key-display">
@@ -20,21 +20,21 @@
               class="form-input-inline"
               placeholder="sk-..."
             />
-            <button class="copy-btn" @click="showKey = !showKey">{{ showKey ? 'Hide' : 'Show' }}</button>
+            <button class="copy-btn" @click="showKey = !showKey">{{ showKey ? t('hideKey') : t('showKey') }}</button>
           </div>
         </div>
-        <button class="form-btn" @click="saveApiKey">Save API Key</button>
-        <p class="ok-msg" v-if="apiSaved">API Key saved to local disk</p>
+        <button class="form-btn" @click="saveApiKey">{{ t('saveApiKey') }}</button>
+        <p class="ok-msg" v-if="apiSaved">{{ t('apiKeySaved') }}</p>
       </template>
 
       <!-- Email -->
       <template v-else-if="currentTab === 'email'">
-        <h2>Email (SMTP)</h2>
-        <p class="sub">Configure SMTP to receive notifications. Data stored on your local disk only.</p>
+        <h2>{{ t('emailModalTitle') }}</h2>
+        <p class="sub">{{ t('emailModalSub') }}</p>
         <div class="form-group">
-          <label class="form-label">Provider</label>
+          <label class="form-label">{{ t('smtpProvider') }}</label>
           <select v-model="smtpProvider" @change="onProvider" class="form-input">
-            <option value="">Custom</option>
+            <option value="">{{ t('custom') }}</option>
             <option value="qq">QQ Mail</option>
             <option value="163">163 Mail</option>
             <option value="gmail">Gmail</option>
@@ -43,30 +43,30 @@
         </div>
         <div class="form-row">
           <div class="form-group" style="flex:2">
-            <label class="form-label">SMTP Server</label>
+            <label class="form-label">{{ t('smtpServer') }}</label>
             <input v-model="smtpHost" class="form-input" placeholder="smtp.example.com" />
           </div>
           <div class="form-group" style="flex:1">
-            <label class="form-label">Port</label>
+            <label class="form-label">{{ t('smtpPort') }}</label>
             <input v-model="smtpPort" class="form-input" placeholder="465" />
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Email address</label>
+          <label class="form-label">{{ t('smtpEmail') }}</label>
           <input v-model="smtpUser" class="form-input" placeholder="you@example.com" />
         </div>
         <div class="form-group">
-          <label class="form-label">Auth code</label>
-          <input v-model="smtpPass" type="password" class="form-input" placeholder="Not your login password" />
+          <label class="form-label">{{ t('smtpAuth') }}</label>
+          <input v-model="smtpPass" type="password" class="form-input" :placeholder="t('smtpAuthHint')" />
         </div>
-        <button class="form-btn" @click="saveSMTP">Save SMTP</button>
-        <p class="ok-msg" v-if="smtpSaved">SMTP saved</p>
+        <button class="form-btn" @click="saveSMTP">{{ t('saveSMTP') }}</button>
+        <p class="ok-msg" v-if="smtpSaved">{{ t('smtpSaved') }}</p>
       </template>
 
       <!-- Default -->
       <template v-else>
-        <h2>Settings</h2>
-        <p class="sub">Select a category from the sidebar to configure.</p>
+        <h2>{{ t('settingsTitle') }}</h2>
+        <p class="sub">{{ t('settingsSub') }}</p>
       </template>
     </div>
   </div>
@@ -76,6 +76,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useChatStore } from '../../store/chatStore.js'
 import { loadSMTPConfig, saveSMTPConfig } from '../../utils/email.js'
+import { useI18n } from '../../composables/useI18n.js'
+
+const { t } = useI18n()
 
 const props = defineProps({ tab: String })
 defineEmits(['close'])

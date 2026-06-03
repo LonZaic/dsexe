@@ -42,10 +42,36 @@
     </div>
 
     <div class="sidebar-bottom">
-      <button class="lang-toggle" @click="toggleLang()">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><ellipse cx="7" cy="7" rx="2.5" ry="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 7h10M7 1.5v11" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
-        <span>{{ lang === 'zh' ? 'EN' : t('chinese') }}</span>
-      </button>
+      <!-- ═══ Language Switcher Dropdown ═══ -->
+      <div class="lang-switcher" ref="langSwitcherRef">
+        <button class="lang-btn" @click="showLangMenu = !showLangMenu" :title="t('switchLang')">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.2"/>
+            <ellipse cx="7.5" cy="7.5" rx="2.8" ry="6" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M1.5 7.5h12M7.5 1.5v12" stroke="currentColor" stroke-width="0.9" stroke-linecap="round"/>
+          </svg>
+          <span class="lang-label">{{ currentLangLabel }}</span>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="lang-chevron" :class="{ open: showLangMenu }">
+            <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <Transition name="lang-drop">
+          <div v-if="showLangMenu" class="lang-menu" @click.stop>
+            <button
+              v-for="m in LANG_META"
+              :key="m.code"
+              :class="['lang-option', { active: lang === m.code }]"
+              @click="selectLang(m.code)"
+            >
+              <span class="lang-option-name">{{ isZh ? m.native : m.en }}</span>
+              <svg v-if="lang === m.code" width="14" height="14" viewBox="0 0 14 14" fill="none" class="lang-check">
+                <path d="M3 7.5l2.5 2.5L11 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </Transition>
+      </div>
+
       <template v-if="loggedIn">
         <div class="user-row">
           <div class="user-avatar">{{ userName?.charAt(0) || 'U' }}</div>
@@ -66,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../../store/chatStore.js'
 import { isLoggedIn, logout } from '../../api/index.js'
@@ -76,12 +102,17 @@ import { useI18n } from '../../composables/useI18n.js'
 const router = useRouter()
 const route = useRoute()
 const store = useChatStore()
-const { t, lang, toggleLang } = useI18n()
+const { t, lang, setLang, langDisplay, LANG_META, isZh } = useI18n()
 const loggedIn = ref(isLoggedIn())
 const apiKeySet = ref(false)
 const openSettings = inject('openSettings')
 
+const showLangMenu = ref(false)
+const langSwitcherRef = ref(null)
+
 const isSocialActive = computed(() => ['/social','/friends','/groups','/dm','/group'].some(p => route.path.startsWith(p)))
+
+const currentLangLabel = computed(() => langDisplay(lang.value))
 
 const userName = computed(() => { try { return JSON.parse(localStorage.getItem('bbot_user')).name } catch { return null } })
 
@@ -90,10 +121,27 @@ function newChat() { if (!apiKeySet.value) { openSettings('api'); return }; cons
 function openChat(id) { store.switchTab(id); router.push('/chat/' + id) }
 function doLogout() { logout(); disconnect(); loggedIn.value = false; router.push('/') }
 
+function selectLang(code) {
+  setLang(code)
+  showLangMenu.value = false
+}
+
+// Close lang menu on outside click
+function onOutsideClick(e) {
+  if (showLangMenu.value && langSwitcherRef.value && !langSwitcherRef.value.contains(e.target)) {
+    showLangMenu.value = false
+  }
+}
+
 onMounted(() => {
   store.loadApiKey(); store.loadConversations()
   apiKeySet.value = store.apikey.length > 0; loggedIn.value = isLoggedIn()
   setInterval(() => { loggedIn.value = isLoggedIn(); apiKeySet.value = store.apikey.length > 0 }, 2000)
+  document.addEventListener('click', onOutsideClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onOutsideClick)
 })
 </script>
 
@@ -117,8 +165,49 @@ onMounted(() => {
 .recent-item.active { background: var(--bg3); color: var(--text); }
 .recents-empty { padding: 20px 12px; font-size: 12px; color: var(--text3); font-weight: 300; }
 .sidebar-bottom { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
-.lang-toggle { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; border: none; background: transparent; color: var(--text3); font-size: 11px; font-family: inherit; font-weight: 300; cursor: pointer; transition: all .12s; width: 100%; }
-.lang-toggle:hover { background: var(--bg3); color: var(--text2); }
+
+/* ═══ Language Switcher ═══ */
+.lang-switcher { position: relative; }
+.lang-btn {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%; padding: 6px 9px;
+  border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--text2);
+  font-size: 12px; font-family: inherit; font-weight: 300;
+  cursor: pointer; transition: all .12s;
+}
+.lang-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+.lang-label { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lang-chevron { color: var(--text3); flex-shrink: 0; transition: transform .18s ease; }
+.lang-chevron.open { transform: rotate(180deg); }
+
+.lang-menu {
+  position: absolute; bottom: 100%; left: 0; right: 0;
+  margin-bottom: 4px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.35);
+  padding: 4px; z-index: var(--z-dropdown);
+  min-width: 180px;
+}
+
+.lang-option {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 7px 10px; border-radius: 6px;
+  border: none; background: transparent;
+  color: var(--text2); font-size: 12px; font-family: inherit; font-weight: 300;
+  cursor: pointer; transition: all .1s; text-align: left;
+}
+.lang-option:hover { background: var(--bg3); color: var(--text); }
+.lang-option.active { background: var(--accent-muted); color: var(--accent); font-weight: 400; }
+.lang-option-name { flex: 1; }
+.lang-check { color: var(--accent); flex-shrink: 0; }
+
+/* Dropdown transitions */
+.lang-drop-enter-active { animation: langIn .18s ease both; transform-origin: bottom center; }
+.lang-drop-leave-active { animation: langOut .12s ease both; transform-origin: bottom center; }
+@keyframes langIn { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes langOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(6px) scale(.96); } }
+
 .user-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
 .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; }
 .user-name { flex: 1; font-size: 13px; color: var(--text2); font-weight: 300; }
