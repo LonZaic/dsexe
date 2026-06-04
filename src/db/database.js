@@ -156,6 +156,19 @@ export async function initDB() {
     addCol('designs', "TEXT DEFAULT '[]'")
     addCol('reasoning', "TEXT DEFAULT ''")
 
+    // migration: code_messages new columns
+    const cmCols = db.exec("PRAGMA table_info('code_messages')")
+    const cmColNames = cmCols.length ? cmCols[0].values.map(r => r[1]) : []
+    const addCmCol = (name, def) => {
+        if (!cmColNames.includes(name)) {
+            try { db.run(`ALTER TABLE code_messages ADD COLUMN ${name} ${def}`) } catch(e) { console.warn('[DB] add cm column failed:', name, e.message) }
+        }
+    }
+    addCmCol('events_json', "TEXT DEFAULT '[]'")
+    addCmCol('done', "INTEGER DEFAULT 0")
+    addCmCol('error', "INTEGER DEFAULT 0")
+    addCmCol('timer', "TEXT DEFAULT ''")
+
     saveDB()
 }
 
@@ -378,17 +391,17 @@ export function getCodeMessages(convId) {
   return rows
 }
 
-export function addCodeMessage(convId, role, text, html, thinking, tasksJson) {
-  db.run('INSERT INTO code_messages (conv_id, role, text, html, thinking, tasks_json) VALUES (?, ?, ?, ?, ?, ?)',
-    [convId, role, text || '', html || '', thinking || '', tasksJson || '[]'])
+export function addCodeMessage(convId, role, text, html, thinking, tasksJson, eventsJson, done, error, timer) {
+  db.run('INSERT INTO code_messages (conv_id, role, text, html, thinking, tasks_json, events_json, done, error, timer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [convId, role, text || '', html || '', thinking || '', tasksJson || '[]', eventsJson || '[]', done ? 1 : 0, error ? 1 : 0, timer || ''])
   saveDB()
   const r = db.exec("SELECT last_insert_rowid()")
   return Number(r[0].values[0][0])
 }
 
-export function updateCodeMessage(id, text, html, thinking, tasksJson) {
-  db.run('UPDATE code_messages SET text = ?, html = ?, thinking = ?, tasks_json = ? WHERE id = ?',
-    [text || '', html || '', thinking || '', tasksJson || '[]', id])
+export function updateCodeMessage(id, text, html, thinking, tasksJson, eventsJson, done, error, timer) {
+  db.run('UPDATE code_messages SET text = ?, html = ?, thinking = ?, tasks_json = ?, events_json = ?, done = ?, error = ?, timer = ? WHERE id = ?',
+    [text || '', html || '', thinking || '', tasksJson || '[]', eventsJson || '[]', done ? 1 : 0, error ? 1 : 0, timer || '', id])
   saveDB()
 }
 

@@ -99,15 +99,24 @@ export const useCodeStore = defineStore('code', () => {
   function openConversation(id) {
     if (!messagesMap.value[id]) {
       const rows = getCodeMessages(id)
-      messagesMap.value[id] = rows.map(r => ({
-        id: r.id,
-        _id: r.role + '_' + r.id,
-        role: r.role,
-        text: r.text || '',
-        html: r.html || '',
-        thinking: r.thinking || '',
-        _thinkOpen: false,
-      }))
+      messagesMap.value[id] = rows.map(r => {
+        let events = []
+        try { events = JSON.parse(r.events_json || '[]') } catch {}
+        return {
+          id: r.id,
+          _id: r.role + '_' + r.id,
+          role: r.role,
+          text: r.text || '',
+          html: r.html || '',
+          thinking: r.thinking || '',
+          _thinkOpen: false,
+          _events: events,
+          _done: r.done === 1,
+          _error: r.error === 1,
+          _timer: r.timer || '',
+          _expanded: true,
+        }
+      })
       // Load task state from last message
       const last = rows[rows.length - 1]
       if (last?.tasks_json) {
@@ -147,17 +156,22 @@ export const useCodeStore = defineStore('code', () => {
 
   function addUserMessage(text) {
     if (!currentId.value) return -1
-    return addCodeMessage(currentId.value, 'user', text, '', '', '[]')
+    return addCodeMessage(currentId.value, 'user', text, '', '', '[]', '[]', false, false, '')
   }
 
-  function addAiMessage(text, html, thinking, tasksJson) {
+  function addAiMessage(text, html, thinking, tasksJson, eventsJson, done, error, timer) {
     if (!currentId.value) return -1
-    return addCodeMessage(currentId.value, 'ai', text, html, thinking, tasksJson || JSON.stringify(tasks.value))
+    return addCodeMessage(currentId.value, 'ai', text, html, thinking,
+      tasksJson || JSON.stringify(tasks.value),
+      eventsJson || '[]',
+      done || false, error || false, timer || ''
+    )
   }
 
-  function updateMessageText(dbId, text, html, thinking) {
+  function updateMessageText(dbId, text, html, thinking, eventsJson, done, error, timer) {
     if (!dbId || dbId < 0) return
-    updateCodeMessage(dbId, text, html, thinking, JSON.stringify(tasks.value))
+    updateCodeMessage(dbId, text, html, thinking, JSON.stringify(tasks.value),
+      eventsJson || '[]', done ? 1 : 0, error ? 1 : 0, timer || '')
   }
 
   function renameConversation(id, title) {

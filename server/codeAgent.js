@@ -123,7 +123,7 @@ ${task}
   const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, messages: [{ role: 'user', content: planPrompt }], max_tokens: 1024, temperature: 0.3 }),
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: planPrompt }], max_tokens: 2048, temperature: 0.3 }),
     signal
   })
   const data = await res.json()
@@ -196,7 +196,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
       response = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 4096, temperature: 0.3, stream: true }),
+        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3, stream: true }),
         signal
       })
     } catch (e) {
@@ -396,11 +396,14 @@ ${conversation.slice(0, 1500)}
 function buildCodeSystemPrompt(projectPath, followContent, tasks) {
   let p = `你是一个专业代码 AI，工作在项目: ${projectPath}
 
-## 核心规则
-1. 使用 edit_file 修改现有文件，使用 write_file 创建新文件
-2. 读写前先理解项目文件结构
-3. 每完成一步立即报告
-4. 只用 SVG 图标，禁止 emoji
+## 核心规则（非常重要！）
+1. 你必须真正创建和修改文件！不要只探索，要动手写代码！
+2. 使用 write_file 创建新文件，使用 edit_file 修改现有文件
+3. 每个文件都要写完整、可运行的代码，不要写占位符或 TODO
+4. 代码要健壮，包含必要的错误处理和导入
+5. 只用 SVG 图标，禁止 emoji
+6. 任务按顺序执行，完成一步再做下一步
+7. 不要提前结束！所有步骤完成后才能说完成
 
 ## 项目记忆 (Follow.md)
 ${followContent.slice(0, 1500)}
@@ -408,7 +411,14 @@ ${followContent.slice(0, 1500)}
 ## 任务列表
 ${tasks.map(t => `- [${t.done ? 'x' : ' '}] ${t.id}. ${t.text}`).join('\n')}
 
-按顺序执行，完成一步再做下一步。`
+按顺序执行，完成一步再做下一步。
+
+## 最终汇报
+全部步骤完成后，必须写一段简洁的最终汇报（100字内），内容包括：
+- 本次做了什么改动
+- 涉及了哪些文件
+- 有没有需要注意的地方
+格式：用自然语言向用户汇报，就像同事做完事跟你同步一样。`
   return p
 }
 

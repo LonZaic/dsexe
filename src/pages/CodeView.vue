@@ -24,7 +24,7 @@
       <template v-else>
         <div class="cv-tabs" v-if="store.openFiles.length">
           <div v-for="f in store.openFiles" :key="f.path"
-            :class="['cv-tab', { active: f.path === store.activeFilePath }]"
+            :class="['cv-tab', { active: f.path === store.activeFilePath, deleted: f._deleted }]"
             @click="store.activeFilePath = f.path">
             <span class="cv-tab-name">{{ f.name }}</span>
             <button class="cv-tab-close" @click.prevent.stop="store.closeFile(f.path)">
@@ -36,9 +36,9 @@
         <div class="cv-code" v-if="activeFile">
           <div class="cv-code-inner" ref="codeRef">
             <div v-for="(line, i) in displayLines" :key="i" class="cv-line"
-              :class="{ 'cv-line-del': line._deleted, 'cv-line-add': line._added }">
+              :class="{ 'cv-line-del': line._deleted || activeFile._deleted, 'cv-line-add': line._added }">
               <span class="cv-line-num">{{ line._num }}</span>
-              <span class="cv-line-code">{{ line.text }}</span>
+              <span class="cv-line-code" v-html="line._html || line.text"></span>
             </div>
           </div>
           <!-- Diff actions -->
@@ -63,7 +63,7 @@
       </template>
     </div>
 
-    <!-- ═══ Resize handle: code | chat ═══ -->
+    <!-- ═══ Resize handle ═══ -->
     <div class="cv-resize-handle" @mousedown="startResize('chat', $event)" v-if="store.projectPath"></div>
 
     <!-- ═══ AI Chat (right) ═══ -->
@@ -88,31 +88,92 @@
           </button>
         </div>
       </div>
+
+      <!-- ═══ Messages — Agent-style step cards ═══ -->
       <div class="cv-chat-msgs" ref="chatRef">
-        <template v-for="m in store.messages" :key="m._id">
-          <!-- Round marker -->
-          <div v-if="m._isRoundMarker" class="cv-round-marker">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4" stroke="var(--accent)" stroke-width="1"/><path d="M4 6l1.5 1.5L8 4.5" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            {{ t('codeNewRound') }}
-          </div>
-          <div v-else-if="m.role === 'user'" class="cv-msg cv-msg-user">
+        <template v-for="m in codeMessages" :key="m._id">
+          <!-- User message -->
+          <div v-if="m.role === 'user'" class="cv-msg cv-msg-user">
             <div class="cv-bubble cv-bubble-user">{{ m.text }}</div>
           </div>
-          <div v-else class="cv-msg cv-msg-ai">
-            <div v-if="m.thinking" class="cv-think">
-              <div class="cv-think-hdr" @click="m._thinkOpen = !m._thinkOpen">
-                <svg class="cv-think-dot" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".6"/></svg>
-                <span>{{ t('codeThinking') }}</span>
+          <!-- AI message: step card -->
+          <div v-else class="cv-card" :class="{ running: m._running, done: m._done }">
+            <!-- Collapsed header -->
+            <button class="cv-card-hdr" @click="m._expanded = !m._expanded">
+              <span class="cv-card-hdr-l">
+                <svg v-if="m._running" class="cv-card-spin" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <circle cx="6.5" cy="6.5" r="5" stroke="var(--text3)" stroke-width="1" opacity=".25"/>
+                  <path d="M11.5 6.5a5 5 0 00-4-4.8" stroke="var(--accent)" stroke-width="1.1" stroke-linecap="round"/>
+                </svg>
+                <svg v-else-if="m._error" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <circle cx="6.5" cy="6.5" r="5.5" stroke="var(--red)" stroke-width="1"/>
+                  <path d="M4.5 4.5l4 4M8.5 4.5l-4 4" stroke="var(--red)" stroke-width="1.1" stroke-linecap="round"/>
+                </svg>
+                <svg v-else width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <circle cx="6.5" cy="6.5" r="5.5" stroke="var(--green)" stroke-width="1"/>
+                  <path d="M4 6.5l1.8 1.8 3.2-3.5" stroke="var(--green)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="cv-card-label">SuperDS</span>
+                <span class="cv-card-dash">&#8212;</span>
+                <span class="cv-card-sum">{{ m._summary }}</span>
+              </span>
+              <span class="cv-card-hdr-r">
+                <span class="cv-card-timer">{{ m._timer }}</span>
+                <svg class="cv-card-chev" :class="{ open: m._expanded }" width="11" height="11" viewBox="0 0 11 11" fill="none">
+                  <path d="M3 4l2.5 2.5L8 4" stroke="var(--text3)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+
+            <!-- Expanded body -->
+            <div v-if="m._expanded" class="cv-card-body">
+              <!-- Thinking / streaming text -->
+              <div v-if="m.thinking" class="cv-think">
+                <div class="cv-think-hdr" @click="m._thinkOpen = !m._thinkOpen">
+                  <svg class="cv-think-dot" :class="{ idle: !m._running }" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".7"/></svg>
+                  <span class="cv-think-label">{{ m._running ? '思考中...' : '思考过程' }}</span>
+                  <svg class="cv-think-chev" :class="{ open: m._thinkOpen }" width="9" height="9" viewBox="0 0 9 9" fill="none">
+                    <path d="M3 2l2 2 2-2" stroke="var(--text3)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+                <div v-if="m._thinkOpen" class="cv-think-body">{{ m.thinking }}</div>
               </div>
-              <div v-if="m._thinkOpen" class="cv-think-body">{{ m.thinking }}</div>
+
+              <!-- Step rows -->
+              <TransitionGroup name="step-fade">
+                <div v-for="s in m._steps" :key="s._k" class="cv-step">
+                  <div class="cv-step-row" @click="s._open = !s._open">
+                    <svg v-if="s._live" class="cv-step-spin" width="11" height="11" viewBox="0 0 11 11" fill="none">
+                      <circle cx="5.5" cy="5.5" r="4" stroke="var(--text3)" stroke-width=".8" opacity=".25"/>
+                      <path d="M9.5 5.5a4 4 0 00-3.2-3.9" stroke="var(--accent)" stroke-width="1" stroke-linecap="round"/>
+                    </svg>
+                    <svg v-else width="11" height="11" viewBox="0 0 11 11" fill="none" class="cv-step-ok">
+                      <circle cx="5.5" cy="5.5" r="4.5" stroke="var(--green)" stroke-width=".8" opacity=".5"/>
+                      <path d="M3.5 5.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="cv-step-phrase" :class="{ sweep: s._live }">{{ s._phrase }}</span>
+                    <span class="cv-step-tool">{{ s._tool }}</span>
+                    <svg v-if="s._detail" class="cv-step-chev" :class="{ open: s._open }" width="9" height="9" viewBox="0 0 9 9" fill="none">
+                      <path d="M2.5 3L4.5 5l2-2" stroke="var(--text3)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <div v-if="s._hint" class="cv-step-hint">{{ s._hint }}</div>
+                  <div v-if="s._open && s._detail" class="cv-step-detail"><code class="cv-step-code">{{ s._detail }}</code></div>
+                </div>
+              </TransitionGroup>
+              <div v-if="m._running" class="cv-scan"></div>
+
+              <!-- Final output -->
+              <div v-if="!m._running && m.html" class="cv-final markdown-body" v-html="m.html"></div>
+              <div v-if="m._error && m.html" class="cv-final cv-final-err markdown-body" v-html="m.html"></div>
             </div>
-            <div class="cv-bubble cv-bubble-ai markdown-body" v-html="m.html"></div>
           </div>
         </template>
-        <div v-if="!store.messages.length && store.currentId" class="cv-chat-hint">
+        <div v-if="!codeMessages.length && store.currentId" class="cv-chat-hint">
           {{ t('codeChatHint') }}
         </div>
       </div>
+
       <div class="cv-chat-bar">
         <div class="cv-chat-row">
           <textarea ref="inputRef" v-model="task" :placeholder="t('codePlaceholder')" :rows="1"
@@ -139,7 +200,7 @@
       </div>
     </div>
 
-    <!-- ═══ Open Project Modal ═══ -->
+    <!-- Modals unchanged -->
     <div v-if="showOpenProject" class="cv-modal-overlay" @click.self="showOpenProject = false">
       <div class="cv-modal">
         <div class="cv-modal-hdr">
@@ -169,7 +230,6 @@
       </div>
     </div>
 
-    <!-- ═══ SuperDS接管确认 ═══ -->
     <div v-if="showConfirmTakeover" class="cv-modal-overlay">
       <div class="cv-modal" style="width:380px">
         <div class="cv-modal-hdr">
@@ -194,7 +254,6 @@
       </div>
     </div>
 
-    <!-- ═══ New Project Modal ═══ -->
     <div v-if="showNewProject" class="cv-modal-overlay" @click.self="showNewProject = false">
       <div class="cv-modal">
         <div class="cv-modal-hdr">
@@ -228,7 +287,6 @@
       </div>
     </div>
 
-    <!-- ═══ Switch project confirm ═══ -->
     <div v-if="showSwitch" class="cv-modal-overlay" @click.self="showSwitch = false">
       <div class="cv-modal" style="width:360px">
         <div class="cv-modal-hdr">
@@ -254,6 +312,9 @@ import { useCodeStore } from '../stores/codeStore.js'
 import { renderMarkdown } from '../utils/markdown.js'
 import { scanFileTree, readFileContent, newProject, runCodeAgent } from '../api/code.api.js'
 import { useI18n } from '../composables/useI18n.js'
+import { getAgentPhrase } from '../utils/agentPhrases.js'
+import hljs from 'highlight.js'
+window.hljs = hljs
 
 const { t } = useI18n()
 const store = useCodeStore()
@@ -291,41 +352,152 @@ const chatWidth = ref(360)
 let _resizeStartX = 0
 let _resizeStartW = 0
 
-  function startResize(target, e) {
-    _resizeStartX = e.clientX
-    _resizeStartW = chatWidth.value
-    document.addEventListener("mousemove", onResize)
-    document.addEventListener("mouseup", stopResize)
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-  }
+function startResize(target, e) {
+  _resizeStartX = e.clientX
+  _resizeStartW = chatWidth.value
+  document.addEventListener("mousemove", onResize)
+  document.addEventListener("mouseup", stopResize)
+  document.body.style.cursor = "col-resize"
+  document.body.style.userSelect = "none"
+}
 
-  function onResize(e) {
-    chatWidth.value = Math.max(280, Math.min(600, _resizeStartW + (_resizeStartX - e.clientX)))
-  }
+function onResize(e) {
+  chatWidth.value = Math.max(280, Math.min(600, _resizeStartW + (_resizeStartX - e.clientX)))
+}
 
-  function stopResize() {
-    document.removeEventListener("mousemove", onResize)
-    document.removeEventListener("mouseup", stopResize)
-    document.body.style.cursor = ""
-    document.body.style.userSelect = ""
-    localStorage.setItem("code_chat_width", chatWidth.value)
-  }
+function stopResize() {
+  document.removeEventListener("mousemove", onResize)
+  document.removeEventListener("mouseup", stopResize)
+  document.body.style.cursor = ""
+  document.body.style.userSelect = ""
+  localStorage.setItem("code_chat_width", chatWidth.value)
+}
 
-  try {
-    const saved = localStorage.getItem("code_chat_width")
-    if (saved) chatWidth.value = parseInt(saved) || 360
-  } catch {}
+try {
+  const saved = localStorage.getItem("code_chat_width")
+  if (saved) chatWidth.value = parseInt(saved) || 360
+} catch {}
+
+// ─── Enhanced message list with step cards ───
+const codeMessages = computed(() => {
+  const raw = store.messages
+  return raw.filter(m => !m._isRoundMarker).map(m => {
+    if (m.role !== 'ai') return m
+    // Only build step cards for new agent-style messages; old ones stay as plain bubbles
+    const hasEvents = m._events && m._events.length > 0
+    if (!hasEvents) {
+      // Old message from DB — show clean completed card
+      return {
+        ...m,
+        _steps: [],
+        _summary: '任务完成',
+        _running: false,
+        _done: true,
+        _error: false,
+        _expanded: true,
+        _thinkOpen: false,
+        _timer: '',
+        thinking: m.thinking || '',
+      }
+    }
+    const events = m._events || []
+    const steps = buildSteps(events)
+    const lastPhrase = steps.length ? steps[steps.length - 1]._phrase : '分析任务中'
+    return {
+      ...m,
+      _steps: steps,
+      _summary: m._error ? '出错了' : (m._done ? (lastPhrase || '任务完成') : (steps.find(s => s._live)?._phrase || '分析任务中')),
+      _running: m._done === false && !m._error,
+      _done: m._done !== false,
+      _error: !!m._error,
+      _expanded: m._expanded !== false,
+      _thinkOpen: m._thinkOpen !== false,
+    }
+  })
+})
+
+// ─── Build step rows from events (Agent-style) ───
+function buildSteps(events) {
+  if (!events || !events.length) return []
+  const out = []
+  for (const e of events) {
+    // Thinking / narration
+    if (e.type === 'thinking' && e.text) {
+      const t = e.text.split(/[.。\n]/)[0].slice(0, 60)
+      if (t.length > 2) out.push({ _k: 'n' + out.length, _nar: true, _text: t })
+    }
+    // Tool start
+    if (e.type === 'tool_start') {
+      const a = e.args || {}
+      const detail = a.path || a.pattern || a.query || a.command || a.dir || ''
+      out.push({
+        _k: 't' + out.length,
+        _tool: (e.tool || '').replace(/_/g, ' '),
+        _detail: detail || (Object.keys(a).length ? JSON.stringify(a).slice(0, 200) : ''),
+        _phrase: getAgentPhrase(e.tool, 'active'),
+        _hint: hintForCode(e.tool, a),
+        _live: true, _open: false,
+      })
+    }
+    // Tool result
+    if (e.type === 'tool_result') {
+      for (let i = out.length - 1; i >= 0; i--) {
+        if (out[i]._live) {
+          out[i]._live = false
+          out[i]._phrase = getAgentPhrase(out[i]._tool.replace(/ /g, '_'), 'done')
+          if (!out[i]._detail && e.result) out[i]._detail = String(e.result).slice(0, 250)
+          break
+        }
+      }
+    }
+    // Plan done
+    if (e.type === 'plan_done') {
+      out.push({ _k: 'plan', _nar: true, _text: '规划完成，开始执行...' })
+    }
+    // Error
+    if (e.type === 'error') {
+      out.push({ _k: 'err', _nar: true, _text: '错误: ' + (e.text || '未知') })
+    }
+  }
+  return out
+}
+
+function hintForCode(tool, args) {
+  const map = {
+    list_files: '巡视项目结构',
+    read_file: '仔细阅读文件内容',
+    write_file: '正在创建新文件',
+    write_to_file: '正在创建新文件',
+    edit_file: '精确修改代码',
+    grep: '搜索代码中',
+    glob: '查找文件',
+    run_command: '执行命令',
+    bash: '执行命令',
+  }
+  return map[tool] || ''
+}
 
 const activeFile = computed(() =>
   store.openFiles.find(f => f.path === store.activeFilePath)
 )
 
+// ─── Syntax-highlighted display lines ───
 const displayLines = computed(() => {
   const f = activeFile.value
   if (!f) return []
-  const lines = (f.content || '').split('\n')
-  let result = lines.map((text, i) => ({ text, _num: i + 1, _deleted: false, _added: false }))
+  const content = f.content || ''
+  // If file is deleted, show all lines as deleted
+  if (f._deleted) {
+    return content.split('\n').map((text, i) => ({
+      text, _num: i + 1, _deleted: true, _added: false,
+      _html: escHtml(text)
+    }))
+  }
+  const lines = content.split('\n')
+  let result = lines.map((text, i) => ({
+    text, _num: i + 1, _deleted: false, _added: false,
+  }))
+  // Apply diffs
   for (const diff of store.pendingDiffs) {
     if (diff.filePath !== f.path) continue
     const oldLen = diff.oldCode.split('\n').length
@@ -336,7 +508,6 @@ const displayLines = computed(() => {
       }
       return l
     })
-    // Insert new lines as added after the deleted section
     if (diff.newCode) {
       const insertIdx = result.findIndex(l => l._deleted)
       if (insertIdx >= 0) {
@@ -347,25 +518,61 @@ const displayLines = computed(() => {
       }
     }
   }
+  // Apply syntax highlighting
+  try {
+    const lang = extToLang(f.name || '')
+    const raw = result.map(l => l.text).join('\n')
+    const hl = tryHighlight(raw, lang)
+    if (hl) {
+      const hlLines = hl.split('\n')
+      result.forEach((l, i) => {
+        if (i < hlLines.length) l._html = hlLines[i]
+      })
+    }
+  } catch {}
   return result
 })
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+function extToLang(name) {
+  const ext = (name || '').split('.').pop().toLowerCase()
+  const map = { js:'javascript', ts:'typescript', vue:'html', jsx:'javascript', tsx:'typescript', py:'python', rb:'ruby', go:'go', rs:'rust', java:'java', css:'css', scss:'scss', html:'xml', json:'json', md:'markdown', yml:'yaml', yaml:'yaml', xml:'xml', sql:'sql', sh:'bash', bat:'bash', ps1:'powershell', c:'c', cpp:'cpp', h:'c', hpp:'cpp', php:'php', swift:'swift', kt:'kotlin', dart:'dart', lua:'lua', r:'r', txt:'' }
+  return map[ext] || ''
+}
+
+function tryHighlight(code, lang) {
+  if (!lang || !code) return null
+  try {
+    if (window.hljs && window.hljs.getLanguage(lang)) {
+      return window.hljs.highlight(code, { language: lang }).value
+    }
+  } catch {}
+  return null
+}
 
 onMounted(() => {
   store.restoreSession()
   if (store.projectPath) loadProject(store.projectPath)
 })
 
-// Watch file tree selection — auto-load content
 watch(() => store.activeFilePath, async (fp) => {
   if (!fp) return
   const existing = store.openFiles.find(f => f.path === fp)
-  // Load content if empty or placeholder
   if (existing && existing.content && existing.content.length > 10) return
   try {
     const { content, name } = await readFileContent(fp)
     store.updateFileContent(fp, content)
     if (!existing) store.openFile(fp, name, content)
-  } catch {}
+  } catch {
+    // File deleted or not found — mark it
+    if (existing) {
+      existing._deleted = true
+      store.updateFileContent(fp, existing.content || '')
+    }
+  }
 })
 
 async function loadProject(projectPath) {
@@ -373,14 +580,12 @@ async function loadProject(projectPath) {
   try {
     const { tree } = await scanFileTree(projectPath)
     store.setFileTree(tree || [])
-    console.log('[Code] loaded', tree?.length || 0, 'files from', projectPath)
   } catch (e) {
     console.error('[Code] loadProject failed:', e)
     store.setFileTree([])
   }
 }
 
-// ─── Open Project Flow ───
 function confirmOpenProject() {
   const p = openProjectPath.value.trim()
   if (!p) return
@@ -399,7 +604,6 @@ async function doOpenProject() {
   await loadProject(p)
 }
 
-// ─── New Project Flow ───
 function confirmNewProject() {
   const name = newProjectName.value.trim()
   if (!name) return
@@ -436,22 +640,12 @@ async function onFileSelect(item) {
   } catch (e) { alert('读取失败: ' + e.message) }
 }
 
-function acceptAll() {
-  while (store.pendingDiffs.length) store.acceptDiff(0)
-}
-
-function rejectAll() {
-  while (store.pendingDiffs.length) store.rejectDiff(0)
-}
-
+function acceptAll() { while (store.pendingDiffs.length) store.acceptDiff(0) }
+function rejectAll() { while (store.pendingDiffs.length) store.rejectDiff(0) }
 function scrollDown() { nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight }) }
 
 const showSwitch = ref(false)
-
-function newCodeConv() {
-  store.createConversation('Code 对话')
-}
-
+function newCodeConv() { store.createConversation('Code 对话') }
 function doSwitchProject() {
   showSwitch.value = false
   store.openFiles = []
@@ -476,6 +670,7 @@ function autoResize() {
 }
 
 let _abortCtrl = null
+let _timerInterval = null
 async function send() {
   const txt = task.value.trim()
   if (!txt || loading.value || !store.projectPath) return
@@ -486,26 +681,41 @@ async function send() {
   store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: txt })
   store.addUserMessage(txt)
 
-  const aiMsg = reactive({ _id: 'a_' + Date.now(), role: 'ai', text: '', html: '', thinking: '', _thinkOpen: false })
+  const startTime = Date.now()
+  const dbId = store.addAiMessage('', '', '', '[]', '[]', false, false, '0s')
+  const aiMsg = reactive({
+    _id: 'a_' + Date.now(), role: 'ai', text: '', html: '', thinking: '',
+    _events: [], _done: false, _error: false, _expanded: true, _thinkOpen: true, _timer: '0s'
+  })
   store.pushMessage(aiMsg)
-  const dbId = store.addAiMessage('', '', '', '[]')
   scrollDown()
 
+  // Timer & periodic DB save
+  _timerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - startTime) / 1000)
+    aiMsg._timer = s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's'
+  }, 1000)
+
   _abortCtrl = new AbortController()
+  let _saveDirty = false
+  const _saveToDb = () => {
+    if (!_saveDirty || dbId < 0) return
+    _saveDirty = false
+    store.updateMessageText(dbId, aiMsg.text, aiMsg.html, aiMsg.thinking,
+      JSON.stringify(aiMsg._events), aiMsg._done ? 1 : 0, aiMsg._error ? 1 : 0, aiMsg._timer)
+  }
+  // Save to DB every 5 seconds
+  const _dbInterval = setInterval(_saveToDb, 5000)
 
   try {
     await runCodeAgent(txt, store.projectPath, codeModel.value, async (event) => {
       const e = event
+      aiMsg._events.push(e)
+      _saveDirty = true
+
       if (e.type === 'thinking' && e.text) {
-        // Stream text into message body like chat mode — real-time character output
-        aiMsg.text = (aiMsg.text || '') + e.text
-        // Show raw text during streaming (fast), render markdown only on done
-        aiMsg.html = aiMsg.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
-        const now = Date.now()
-        if (dbId > 0 && (!aiMsg._lastDb || now - aiMsg._lastDb > 3000)) {
-          store.updateMessageText(dbId, aiMsg.text, aiMsg.html, aiMsg.thinking)
-          aiMsg._lastDb = now
-        }
+        aiMsg.thinking = (aiMsg.thinking || '') + e.text
+        aiMsg._thinkOpen = true
       }
       if (e.type === 'code_diff') {
         store.addDiff({
@@ -522,55 +732,36 @@ async function send() {
           store.updateFileContent(e.filePath, content)
         } catch {}
       }
-      if (e.type === 'tool_start') {
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[' + e.tool + ']'
-        aiMsg._thinkOpen = true
-      }
-      if (e.type === 'plan_done' && e.tasks) {
-        store.setTasks(e.tasks)
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[' + t('codePlanDone') + ']'
-        aiMsg._thinkOpen = true
-      }
-      if (e.type === 'task_done' && e.taskId) {
-        store.markTaskDone(e.taskId)
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[' + t('codeStepDone') + ' ' + e.taskId + ']'
-        aiMsg._thinkOpen = true
-      }
-      if (e.type === 'handoff_needed') {
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[上下文使用率较高，准备接力...]'
-        aiMsg._thinkOpen = true
-      }
-      if (e.type === 'handoff_done') {
-        store.startNewRound()
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[Keep.md 接力文档已生成]'
-        aiMsg._thinkOpen = true
-      }
-      if (e.type === 'context_usage' && e.pct >= 90) {
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[上下文 ' + e.pct + '%，触发接力]'
-        aiMsg._thinkOpen = true
-      }
-      if (e.type === 'done' && e.text) {
-        // Final text already streamed; set final render
-        aiMsg.text = e.text
-        aiMsg.html = renderMarkdown(e.text)
+      if (e.type === 'plan_done' && e.tasks) store.setTasks(e.tasks)
+      if (e.type === 'task_done' && e.taskId) store.markTaskDone(e.taskId)
+
+      if (e.type === 'done') {
+        aiMsg._done = true
+        if (e.text) {
+          aiMsg.text = e.text
+          aiMsg.html = renderMarkdown(e.text)
+        }
         aiMsg._thinkOpen = false
-        if (dbId > 0) store.updateMessageText(dbId, e.text, renderMarkdown(e.text), aiMsg.thinking)
       }
       if (e.type === 'error') {
+        aiMsg._error = true
         aiMsg.html = renderMarkdown('**出错**: ' + (e.text || '未知'))
-        if (dbId > 0) store.updateMessageText(dbId, aiMsg.text, aiMsg.html, aiMsg.thinking)
       }
       await nextTick(); scrollDown()
     }, _abortCtrl.signal)
   } catch (e) {
     if (e.name !== 'AbortError') {
+      aiMsg._error = true
       aiMsg.html = renderMarkdown('**出错**: ' + (e.message || '未知'))
     }
   }
 
+  clearInterval(_timerInterval)
+  clearInterval(_dbInterval)
+  aiMsg._done = true
   loading.value = false
   _abortCtrl = null
-  // Refresh file tree after changes
+  _saveToDb()
   if (store.projectPath) loadProject(store.projectPath)
   scrollDown()
 }
@@ -578,219 +769,161 @@ async function send() {
 
 <style scoped>
 .cv-root { display: flex; height: 100%; overflow: hidden; }
-.cv-resize-handle {
-  width: 4px; cursor: col-resize; flex-shrink: 0;
-  background: transparent; transition: background .2s;
-  z-index: 10;
-}
+.cv-resize-handle { width: 4px; cursor: col-resize; flex-shrink: 0; background: transparent; transition: background .2s; z-index: 10; }
 .cv-resize-handle:hover { background: var(--accent); opacity: .4; }
-.cv-round-marker {
-  display: flex; align-items: center; gap: 8px; justify-content: center;
-  padding: 12px 0; font-size: 12px; color: var(--accent); font-weight: 400;
-  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-  margin: 8px 0;
-}
 .cv-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; background: var(--bg); }
-.cv-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; height: 100%;
-}
+.cv-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 100%; }
 .cv-empty-title { font-size: 18px; font-weight: 400; color: var(--text); }
 .cv-empty-desc { font-size: 13px; color: var(--text3); font-weight: 300; }
 .cv-empty-actions { display: flex; gap: 10px; margin-top: 12px; }
-.cv-act-btn {
-  display: flex; align-items: center; gap: 7px;
-  padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--border);
-  background: var(--bg2); color: var(--text2); cursor: pointer;
-  font-size: 13px; font-family: inherit; font-weight: 300; transition: all .12s;
-}
+.cv-act-btn { display: flex; align-items: center; gap: 7px; padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg2); color: var(--text2); cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 300; transition: all .12s; }
 .cv-act-btn:hover { background: var(--bg3); border-color: var(--accent); color: var(--text); }
-.cv-tabs {
-  display: flex; gap: 2px; padding: 4px 8px 0;
-  background: var(--bg2); border-bottom: 1px solid var(--border);
-  overflow-x: auto; flex-shrink: 0;
-}
+
+/* ─── Tabs ─── */
+.cv-tabs { display: flex; gap: 2px; padding: 4px 8px 0; background: var(--bg2); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
 .cv-tabs::-webkit-scrollbar { height: 2px; }
-.cv-tab {
-  display: flex; align-items: center; gap: 5px;
-  padding: 6px 10px 5px; border-radius: 6px 6px 0 0;
-  cursor: pointer; font-size: 12px; font-weight: 300; color: var(--text3);
-  border: 1px solid transparent; border-bottom: none; white-space: nowrap; transition: all .12s;
-}
+.cv-tab { display: flex; align-items: center; gap: 5px; padding: 6px 10px 5px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 12px; font-weight: 300; color: var(--text3); border: 1px solid transparent; border-bottom: none; white-space: nowrap; transition: all .12s; }
 .cv-tab:hover { background: var(--bg3); color: var(--text2); }
 .cv-tab.active { background: var(--bg); color: var(--text); border-color: var(--border); }
+.cv-tab.deleted .cv-tab-name { text-decoration: line-through; color: var(--red); opacity: .7; }
 .cv-tab-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
-.cv-tab-close {
-  display: flex; align-items: center; justify-content: center; width: 14px; height: 14px;
-  border-radius: 3px; border: none; background: transparent; color: var(--text3); cursor: pointer;
-}
+.cv-tab-close { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 3px; border: none; background: transparent; color: var(--text3); cursor: pointer; }
 .cv-tab-close:hover { background: var(--bg4); color: var(--red); }
+
+/* ─── Code area ─── */
 .cv-code { flex: 1; overflow: auto; padding: 8px 0; position: relative; }
 .cv-code::-webkit-scrollbar { width: 4px; }
 .cv-code::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 4px; }
-.cv-code-empty {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 8px; color: var(--text3); font-size: 13px; font-weight: 300;
-}
+.cv-code-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text3); font-size: 13px; font-weight: 300; }
 .cv-code-inner { font-family: var(--font-mono); font-size: 13px; line-height: 1.65; }
 .cv-line { display: flex; gap: 0; padding: 0 12px; transition: background .15s; }
 .cv-line:hover { background: var(--bg3); }
-.cv-line-num {
-  width: 42px; text-align: right; padding-right: 14px;
-  color: var(--text3); font-size: 11px; user-select: none; flex-shrink: 0;
-}
+.cv-line-num { width: 42px; text-align: right; padding-right: 14px; color: var(--text3); font-size: 11px; user-select: none; flex-shrink: 0; }
 .cv-line-code { white-space: pre; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.cv-line-del { background: rgba(248,81,73,.1); }
-.cv-line-del .cv-line-code { text-decoration: line-through; color: var(--red); opacity: .8; }
-.cv-line-add { background: rgba(63,185,80,.1); }
-.cv-line-add .cv-line-code { color: var(--green); text-decoration: none; }
-.cv-diff-actions {
-  position: sticky; bottom: 0; display: flex; gap: 8px; justify-content: center;
-  padding: 10px; background: var(--bg2); border-top: 1px solid var(--border);
-}
-.cv-diff-btn {
-  display: flex; align-items: center; gap: 5px;
-  padding: 6px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border);
-  font-size: 12px; font-family: inherit; cursor: pointer; transition: all .12s;
-}
+.cv-line-del { background: rgba(248,81,73,.08); }
+.cv-line-del .cv-line-code { text-decoration: line-through; color: var(--red); opacity: .7; }
+.cv-line-add { background: rgba(63,185,80,.08); }
+.cv-line-add .cv-line-code { color: var(--green); }
+.cv-diff-actions { position: sticky; bottom: 0; display: flex; gap: 8px; justify-content: center; padding: 10px; background: var(--bg2); border-top: 1px solid var(--border); }
+.cv-diff-btn { display: flex; align-items: center; gap: 5px; padding: 6px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 12px; font-family: inherit; cursor: pointer; transition: all .12s; }
 .cv-diff-btn.accept { background: rgba(63,185,80,.15); color: var(--green); border-color: rgba(63,185,80,.3); }
 .cv-diff-btn.accept:hover { background: rgba(63,185,80,.25); }
 .cv-diff-btn.reject { background: rgba(248,81,73,.1); color: var(--red); border-color: rgba(248,81,73,.25); }
 .cv-diff-btn.reject:hover { background: rgba(248,81,73,.2); }
-.cv-chat {
-  width: 360px; display: flex; flex-direction: column;
-  border-left: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; overflow: hidden;
-}
-.cv-chat-top {
-  display: flex; align-items: center; padding: 4px 4px 0;
-  border-bottom: 1px solid var(--border); flex-shrink: 0;
-}
+
+/* ─── Chat area ─── */
+.cv-chat { width: 360px; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; overflow: hidden; }
+.cv-chat-top { display: flex; align-items: center; padding: 4px 4px 0; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .cv-chat-tabs { display: flex; gap: 2px; overflow-x: auto; flex: 1; min-width: 0; }
 .cv-chat-tabs::-webkit-scrollbar { height: 2px; }
 .cv-chat-acts { display: flex; gap: 2px; flex-shrink: 0; padding-left: 4px; }
-.cv-chat-act {
-  width: 26px; height: 26px; border-radius: 5px;
-  border: none; background: transparent; color: var(--text3); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: all .12s;
-}
+.cv-chat-act { width: 26px; height: 26px; border-radius: 5px; border: none; background: transparent; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; }
 .cv-chat-act:hover { background: var(--bg3); color: var(--text); }
-.cv-ctab {
-  display: flex; align-items: center; gap: 4px;
-  padding: 5px 8px; border-radius: 6px 6px 0 0;
-  cursor: pointer; font-size: 11px; font-weight: 300; color: var(--text3);
-  border: 1px solid transparent; border-bottom: none; white-space: nowrap;
-}
+.cv-ctab { display: flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 11px; font-weight: 300; color: var(--text3); border: 1px solid transparent; border-bottom: none; white-space: nowrap; }
 .cv-ctab:hover { color: var(--text2); }
 .cv-ctab.active { background: var(--bg); color: var(--text); border-color: var(--border); }
 .cv-ctab-title { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
 .cv-ctab-close { display: flex; align-items: center; width: 12px; height: 12px; border: none; background: transparent; color: var(--text3); cursor: pointer; }
-.cv-chat-msgs { flex: 1; overflow-y: auto; padding: 12px; }
+.cv-chat-msgs { flex: 1; overflow-y: auto; padding: 10px; }
 .cv-chat-msgs::-webkit-scrollbar { width: 3px; }
 .cv-msg { margin-bottom: 10px; }
 .cv-msg-user { display: flex; justify-content: flex-end; }
 .cv-bubble { padding: 8px 12px; font-size: 13px; line-height: 1.55; font-weight: 300; word-break: break-word; }
 .cv-bubble-user { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-lg); max-width: 85%; }
-.cv-bubble-ai { border-left: 2px solid var(--accent); padding-left: 10px; max-width: 100%; }
-.cv-think { margin-bottom: 6px; border-left: 2px solid var(--accent-muted); padding-left: 8px; }
-.cv-think-hdr { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 11px; color: var(--text3); }
-.cv-think-body { font-size: 11px; color: var(--text3); white-space: pre-wrap; padding: 3px 0; max-height: 100px; overflow-y: auto; font-style: italic; }
 .cv-chat-hint { padding: 20px 0; text-align: center; font-size: 12px; color: var(--text3); font-weight: 300; }
+
+/* ─── Agent-style step cards ─── */
+.cv-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); overflow: hidden; margin-bottom: 8px; transition: border-color .3s; }
+.cv-card.running { border-color: rgba(79,125,255,.2); }
+.cv-card.done { border-color: rgba(63,185,80,.12); }
+.cv-card-hdr { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 7px 10px; gap: 8px; background: none; border: none; color: var(--text2); font: 300 12px var(--font-sans); cursor: pointer; text-align: left; transition: background .12s; }
+.cv-card-hdr:hover { background: var(--bg3); }
+.cv-card-hdr-l { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.cv-card-hdr-r { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cv-card-label { font-weight: 500; color: var(--text); font-size: 13px; flex-shrink: 0; }
+.cv-card-dash { color: var(--text3); flex-shrink: 0; font-size: 11px; }
+.cv-card-sum { color: var(--text2); font-weight: 300; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-card-timer { font-size: 10px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.cv-card-chev { flex-shrink: 0; opacity: .4; transition: transform .15s; }
+.cv-card-chev.open { transform: rotate(180deg); opacity: .7; }
+
+@keyframes cvSpin { to { transform: rotate(360deg); } }
+.cv-card-spin { animation: cvSpin 1.2s linear infinite; flex-shrink: 0; }
+
+.cv-card-body { padding: 2px 2px 8px; position: relative; }
+
+/* ─── Thinking ─── */
+.cv-think { margin: 0 4px 4px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: rgba(79,125,255,.03); }
+.cv-think-hdr { display: flex; align-items: center; gap: 5px; padding: 5px 10px; cursor: pointer; user-select: none; transition: background .12s; }
+.cv-think-hdr:hover { background: var(--bg3); }
+.cv-think-dot { flex-shrink: 0; animation: cvPulse 1.2s ease-in-out infinite; }
+.cv-think-dot.idle { animation: none; opacity: .4; }
+@keyframes cvPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.cv-think-label { font-size: 11px; font-weight: 500; color: var(--accent); letter-spacing: .3px; }
+.cv-think-chev { flex-shrink: 0; opacity: .4; transition: transform .15s; margin-left: auto; }
+.cv-think-chev.open { transform: rotate(180deg); opacity: .7; }
+.cv-think-body { padding: 4px 10px 8px; font-size: 11px; line-height: 1.5; color: var(--text3); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; font-style: italic; }
+
+/* ─── Step rows ─── */
+.cv-step { margin-bottom: 1px; }
+.cv-step-row { display: flex; align-items: center; gap: 6px; padding: 4px 10px; cursor: pointer; border-radius: 5px; transition: background .12s; font-size: 12px; font-weight: 300; }
+.cv-step-row:hover { background: var(--bg3); }
+.cv-step-spin { animation: cvSpin 1.2s linear infinite; flex-shrink: 0; }
+.cv-step-ok { flex-shrink: 0; }
+.cv-step-phrase { color: var(--text); font-size: 12px; font-weight: 300; flex-shrink: 0; white-space: nowrap; transition: color .35s; }
+.cv-step-phrase.sweep { background: linear-gradient(90deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%); background-size: 200% 100%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: cvSweep 2.2s ease-in-out infinite; }
+@keyframes cvSweep { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+.cv-step-tool { color: var(--text3); font-size: 9px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; opacity: .6; }
+.cv-step-chev { flex-shrink: 0; opacity: .35; transition: transform .15s; }
+.cv-step-chev.open { transform: rotate(180deg); opacity: .65; }
+.cv-step-hint { padding: 0 10px 0 27px; font-size: 11px; color: var(--text3); font-weight: 300; font-style: italic; line-height: 1.4; }
+.cv-step-detail { margin: 2px 10px 4px 27px; padding: 6px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; }
+.cv-step-code { font-size: 10px; font-family: var(--font-mono); color: var(--text2); white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+
+/* ─── Scan line ─── */
+.cv-scan { height: 1px; margin-top: 4px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: cvScan 2s ease-in-out infinite; opacity: .4; }
+@keyframes cvScan { 0% { opacity: 0; transform: scaleX(0); transform-origin: left; } 50% { opacity: 1; transform: scaleX(1); transform-origin: left; } 100% { opacity: 0; transform: scaleX(0); transform-origin: right; } }
+
+/* ─── Final output ─── */
+.cv-final { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); border-top: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
+.cv-final-err { border-top-color: rgba(248,81,73,.2); }
+
+/* ─── Step fade ─── */
+.step-fade-enter-active { animation: cvStepIn .2s ease both; }
+@keyframes cvStepIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── Chat bar ─── */
 .cv-chat-bar { padding: 8px 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .cv-chat-row { display: flex; align-items: center; gap: 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
 .cv-input { flex: 1; resize: none; background: none; border: none; outline: none; color: var(--text); font: 300 13px/1.5 var(--font-sans); min-height: 22px; max-height: 100px; }
 .cv-input::placeholder { color: var(--text3); }
-.cv-send {
-  width: 28px; height: 28px; border-radius: 6px; border: none;
-  background: var(--accent); color: #fff; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .12s;
-}
+.cv-send { width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .12s; }
 .cv-send.off { background: var(--bg4); color: var(--text3); cursor: not-allowed; }
-.cv-model-btn {
-  width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
-  border: none; background: transparent; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.cv-model-dot {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--yellow);
-  transition: background .15s;
-}
+.cv-model-btn { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.cv-model-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); transition: background .15s; }
 .cv-model-dot.pro { background: var(--accent); }
 .cv-model-wrap { position: relative; }
-.cv-model-menu {
-  position: absolute; bottom: 100%; right: 0; margin-bottom: 6px;
-  background: var(--bg2); border: 1px solid var(--border2);
-  border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.35);
-  padding: 4px; z-index: var(--z-dropdown); min-width: 130px;
-}
-.cv-model-opt {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 7px 10px; border-radius: 6px;
-  border: none; background: transparent; color: var(--text2);
-  font-size: 12px; font-family: inherit; font-weight: 300; cursor: pointer;
-  transition: background .1s;
-}
+.cv-model-menu { position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.35); padding: 4px; z-index: var(--z-dropdown); min-width: 130px; }
+.cv-model-opt { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border-radius: 6px; border: none; background: transparent; color: var(--text2); font-size: 12px; font-family: inherit; font-weight: 300; cursor: pointer; transition: background .1s; }
 .cv-model-opt:hover { background: var(--bg3); }
 .cv-model-opt.active { background: var(--accent-muted); color: var(--accent); }
 
-/* Hidden file input */
-.cv-folder-input { display: none; }
-
-/* Modal */
-.cv-modal-overlay {
-  position: fixed; inset: 0; z-index: 100;
-  background: rgba(0,0,0,.5);
-  display: flex; align-items: center; justify-content: center;
-}
-.cv-modal {
-  background: var(--bg2); border: 1px solid var(--border2);
-  border-radius: var(--radius); width: 420px;
-  box-shadow: 0 12px 40px rgba(0,0,0,.4);
-}
-.cv-modal-hdr {
-  display: flex; align-items: center; gap: 8px;
-  padding: 16px 18px; border-bottom: 1px solid var(--border);
-  font-size: 15px; font-weight: 500; color: var(--text);
-}
+/* ─── Modals ─── */
+.cv-modal-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; }
+.cv-modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--radius); width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+.cv-modal-hdr { display: flex; align-items: center; gap: 8px; padding: 16px 18px; border-bottom: 1px solid var(--border); font-size: 15px; font-weight: 500; color: var(--text); }
 .cv-modal-hdr svg { color: var(--accent); flex-shrink: 0; }
-.cv-modal-close {
-  margin-left: auto; width: 26px; height: 26px; border-radius: 6px;
-  border: none; background: transparent; color: var(--text3); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: all .12s;
-}
+.cv-modal-close { margin-left: auto; width: 26px; height: 26px; border-radius: 6px; border: none; background: transparent; color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; }
 .cv-modal-close:hover { background: var(--bg3); color: var(--text); }
 .cv-modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 .cv-field { display: flex; flex-direction: column; gap: 5px; }
 .cv-label { font-size: 12px; font-weight: 500; color: var(--text2); }
-.cv-field-row { display: flex; gap: 8px; }
-.cv-field-input {
-  flex: 1; padding: 8px 10px; border-radius: var(--radius-sm);
-  background: var(--bg3); border: 1px solid var(--border);
-  color: var(--text); font-size: 13px; font-family: inherit; font-weight: 300; outline: none;
-  transition: border-color .15s;
-}
+.cv-field-input { flex: 1; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-size: 13px; font-family: inherit; font-weight: 300; outline: none; transition: border-color .15s; }
 .cv-field-input:focus { border-color: var(--accent); }
 .cv-field-input::placeholder { color: var(--text3); }
-.cv-field-btn {
-  width: 34px; height: 34px; border-radius: var(--radius-sm); flex-shrink: 0;
-  border: 1px solid var(--border); background: var(--bg3); color: var(--text2);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all .12s;
-}
-.cv-field-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
-.cv-field-hint {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--text3); font-weight: 300;
-}
-.cv-modal-ft {
-  display: flex; gap: 8px; justify-content: flex-end;
-  padding: 12px 18px 16px;
-}
-.cv-modal-btn {
-  display: flex; align-items: center; gap: 5px;
-  padding: 8px 16px; border-radius: var(--radius-sm);
-  font-size: 13px; font-family: inherit; font-weight: 400;
-  border: 1px solid var(--border); cursor: pointer; transition: all .12s;
-}
+.cv-field-hint { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); font-weight: 300; }
+.cv-modal-ft { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px 16px; }
+.cv-modal-btn { display: flex; align-items: center; gap: 5px; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-family: inherit; font-weight: 400; border: 1px solid var(--border); cursor: pointer; transition: all .12s; }
 .cv-modal-btn.cancel { background: var(--bg3); color: var(--text2); }
 .cv-modal-btn.cancel:hover { background: var(--bg4); color: var(--text); }
 .cv-modal-btn.ok { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -798,11 +931,25 @@ async function send() {
 .cv-modal-btn.ok:disabled { background: var(--bg4); color: var(--text3); border-color: var(--border); cursor: not-allowed; }
 .cv-confirm-text { font-size: 15px; color: var(--text); font-weight: 400; margin: 0 0 4px; }
 .cv-confirm-sub { font-size: 12px; color: var(--text3); font-weight: 300; margin: 0 0 12px; }
-.cv-confirm-path {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--text3); font-family: var(--font-mono);
-  background: var(--bg3); padding: 6px 10px; border-radius: 4px;
-  word-break: break-all;
-}
+.cv-confirm-path { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); font-family: var(--font-mono); background: var(--bg3); padding: 6px 10px; border-radius: 4px; word-break: break-all; }
 .cv-folder-input { display: none; }
+
+/* ─── highlight.js theme overrides ─── */
+.cv-line-code :deep(.hljs-keyword) { color: #c678dd; }
+.cv-line-code :deep(.hljs-string) { color: #98c379; }
+.cv-line-code :deep(.hljs-number) { color: #d19a66; }
+.cv-line-code :deep(.hljs-comment) { color: #5c6370; font-style: italic; }
+.cv-line-code :deep(.hljs-function) { color: #61afef; }
+.cv-line-code :deep(.hljs-title) { color: #61afef; }
+.cv-line-code :deep(.hljs-built_in) { color: #e5c07b; }
+.cv-line-code :deep(.hljs-literal) { color: #d19a66; }
+.cv-line-code :deep(.hljs-type) { color: #e5c07b; }
+.cv-line-code :deep(.hljs-attr) { color: #d19a66; }
+.cv-line-code :deep(.hljs-params) { color: #abb2bf; }
+.cv-line-code :deep(.hljs-meta) { color: #61afef; }
+.cv-line-code :deep(.hljs-tag) { color: #e06c75; }
+.cv-line-code :deep(.hljs-name) { color: #e06c75; }
+.cv-line-code :deep(.hljs-attr) { color: #d19a66; }
+.cv-line-code :deep(.hljs-selector-class) { color: #61afef; }
+.cv-line-code :deep(.hljs-selector-id) { color: #61afef; }
 </style>
