@@ -601,20 +601,18 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
     // ─── No tool calls → agent is done ───
     if (!msg.tool_calls || msg.tool_calls.length === 0) {
       finalResult = msg.content || 'Task completed.'
+      // Send done immediately so frontend can show the result right away
       onProgress({ type: 'done', text: finalResult, rounds })
 
-      // Extract memories from this successful conversation
-      try {
-        const extractedMemories = await extractMemoriesFromConversation(messages, apiKey, signal)
+      // Memory extraction: fire-and-forget, don't block the response
+      extractMemoriesFromConversation(messages, apiKey, signal).then(extractedMemories => {
         if (extractedMemories && extractedMemories.length > 0) {
           onProgress({ type: 'memory_extracted', text: `Extracted ${extractedMemories.length} new memories`, memories: extractedMemories.map(m => m.name) })
           for (const mem of extractedMemories) {
-            try {
-              saveMemory(MEMORY_DIR, mem.name, mem.description, mem.type, mem.content)
-            } catch {}
+            try { saveMemory(MEMORY_DIR, mem.name, mem.description, mem.type, mem.content) } catch {}
           }
         }
-      } catch { /* best-effort */ }
+      }).catch(() => {})
 
       break
     }
@@ -702,58 +700,48 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
     }
   }
 
-  // ─── Agent stopped (should only happen via abort/budget/error/done) ───
-  // The loop no longer has a hard round limit — it auto-compacts and continues.
-  // If we get here, something forced a break.
+  // ─── Agent stopped ───
 
-  // ─── PostAgentStop hooks ───
-  try {
-    await executePostAgentStop(hooksConfig, messages, finalResult, agentContext)
-  } catch { /* best-effort */ }
-
-  // ─── Final workspace state ───
-  try {
-    function listAll(d, pre = '') {
-      const r = []
-      try {
-        for (const item of fs.readdirSync(d, { withFileTypes: true })) {
-          if (item.name.startsWith('.') || item.name === 'node_modules') continue
-          const rel = pre + item.name
-          if (item.isDirectory()) { r.push(rel + '/'); r.push(...listAll(path.join(d, item.name), rel + '/')) }
-          else { try { r.push(`${rel} (${fs.statSync(path.join(d, item.name)).size}B)`) } catch { r.push(rel) } }
-        }
-      } catch {}
-      return r
-    }
-    onProgress({ type: 'workspace', files: listAll(workspaceRoot).slice(0, 100) })
-  } catch {}
-
-  // ─── Stats (with duration for timer) ───
-  const duration = Date.now() - startTime
-  onProgress({
-    type: 'stats',
-    rounds,
-    hooksFired: agentContext.hooksFired,
-    memoriesFound: agentContext.memoriesFound,
-    budgetUsed: budgetTracker.getStatus().used,
-    duration
-  })
-
-  // ─── Stream the final result word by word ───
+  // ─── Stream the final result word by word (do this FIRST, before any post-processing) ───
   if (finalResult) {
     const words = finalResult.split('')
     let chunk = ''
     for (let i = 0; i < words.length; i++) {
       chunk += words[i]
-      // Send every 5 chars or at natural breaks
-      if (chunk.length >= 5 || i === words.length - 1 || words[i] === '\n') {
+      if (chunk.length >= 4 || i === words.length - 1 || words[i] === '\n') {
         onProgress({ type: 'final_chunk', text: chunk, index: i, total: words.length })
         chunk = ''
-        // Small delay for streaming effect
-        await new Promise(r => setTimeout(r, 10))
+        // Yield to event loop for streaming — use 0ms for fastest streaming
+        await new Promise(r => setTimeout(r, 0))
       }
     }
   }
+
+  // ─── Post-processing: non-critical, fire after streaming ───
+  const duration = Date.now() - startTime
+  onProgress({ type: 'stats', rounds, hooksFired: agentContext.hooksFired, memoriesFound: agentContext.memoriesFound, budgetUsed: budgetTracker.getStatus().used, duration })
+
+  // PostAgentStop hooks (fire-and-forget)
+  executePostAgentStop(hooksConfig, messages, finalResult, agentContext).catch(() => {})
+
+  // Workspace state (fire-and-forget)
+  setImmediate(() => {
+    try {
+      function listAll(d, pre = '') {
+        const r = []
+        try {
+          for (const item of fs.readdirSync(d, { withFileTypes: true })) {
+            if (item.name.startsWith('.') || item.name === 'node_modules') continue
+            const rel = pre + item.name
+            if (item.isDirectory()) { r.push(rel + '/'); r.push(...listAll(path.join(d, item.name), rel + '/')) }
+            else { try { r.push(`${rel} (${fs.statSync(path.join(d, item.name)).size}B)`) } catch { r.push(rel) } }
+          }
+        } catch {}
+        return r
+      }
+      onProgress({ type: 'workspace', files: listAll(workspaceRoot).slice(0, 100) })
+    } catch {}
+  })
 
   return finalResult
 }

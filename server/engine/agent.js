@@ -739,18 +739,18 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
     duration
   })
 
-  // ─── Stream the final result word by word ───
+  // ─── Stream the final result smoothly ───
   if (finalResult) {
-    const words = finalResult.split('')
+    const chars = finalResult.split('')
     let chunk = ''
-    for (let i = 0; i < words.length; i++) {
-      chunk += words[i]
-      // Send every 5 chars or at natural breaks
-      if (chunk.length >= 5 || i === words.length - 1 || words[i] === '\n') {
-        onProgress({ type: 'final_chunk', text: chunk, index: i, total: words.length })
+    for (let i = 0; i < chars.length; i++) {
+      chunk += chars[i]
+      // Send every 40 chars or at newlines, max speed
+      if (chunk.length >= 40 || i === chars.length - 1 || chars[i] === '\n') {
+        onProgress({ type: 'final_chunk', text: chunk, index: i, total: chars.length })
         chunk = ''
-        // Small delay for streaming effect
-        await new Promise(r => setTimeout(r, 10))
+        // Minimal yield for render breathing room — no artificial delay
+        if (i % 200 === 0) await new Promise(r => setTimeout(r, 0))
       }
     }
   }

@@ -1,9 +1,13 @@
 <template>
-  <div class="ap-root" :class="{ running }">
+  <div class="ap-root" :class="{ running, interrupted }">
     <!-- ═══ Collapsed Header ═══ -->
     <button class="ap-hdr" @click="expanded = !expanded">
       <span class="ap-hdr-l">
-        <svg v-if="running" class="ap-spin" width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <svg v-if="interrupted" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="6" stroke="var(--red)" stroke-width="1.2"/>
+          <path d="M4.5 4.5l5 5M9.5 4.5l-5 5" stroke="var(--red)" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <svg v-else-if="running" class="ap-spin" width="14" height="14" viewBox="0 0 14 14" fill="none">
           <circle cx="7" cy="7" r="5.5" stroke="var(--text3)" stroke-width="1.1" opacity="0.3"/>
           <path d="M12.5 7a5.5 5.5 0 0 0-4.4-5.35" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
@@ -17,7 +21,7 @@
         </svg>
         <span class="ap-hdr-label">Agent</span>
         <span class="ap-hdr-dash">&#8212;</span>
-        <span class="ap-hdr-sum">{{ summaryText }}</span>
+        <span class="ap-hdr-sum" :class="{ 'ap-hdr-sum-err': interrupted }">{{ summaryText }}</span>
       </span>
       <span class="ap-hdr-r">
         <span class="ap-hdr-timer">{{ timerText }}</span>
@@ -29,6 +33,32 @@
 
     <!-- ═══ Expanded Body ═══ -->
     <div v-if="expanded" class="ap-body">
+      <!-- Interrupted warning -->
+      <div v-if="interrupted" class="ap-interrupted">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="6" stroke="var(--red)" stroke-width="1.2"/>
+          <path d="M7 4v3.5M7 10.2v.01" stroke="var(--red)" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="ap-interrupted-title">任务中断</div>
+          <div class="ap-interrupted-desc">Agent 工作被中断，任务未完成</div>
+        </div>
+      </div>
+
+      <!-- Thinking: stream in real-time, auto-collapse when tools start -->
+      <div v-if="activeThinking" class="ap-think">
+        <div class="ap-think-hdr" @click="thinkOpen = !thinkOpen">
+          <svg class="ap-think-dot" width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <circle cx="4" cy="4" r="3" fill="var(--accent)" opacity="0.7"/>
+          </svg>
+          <span class="ap-think-label">正在思考中...</span>
+          <svg class="ap-think-chev" :class="{ open: thinkOpen }" width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M3 2l4 3-4 3" stroke="var(--text3)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div v-if="thinkOpen" class="ap-think-body">{{ activeThinking }}</div>
+      </div>
+
       <TransitionGroup name="step-fade">
         <div v-for="s in steps" :key="s._k" class="ap-step" :class="{ nar: s._nar }">
 
@@ -66,6 +96,36 @@
         </div>
       </TransitionGroup>
       <div v-if="running" class="ap-scan"></div>
+
+      <!-- Interrupted partial output -->
+      <div v-if="interrupted && finalOutput" class="ap-final ap-final-interrupted">
+        <div class="ap-final-hdr" @click="outOpen = !outOpen">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="ap-final-err">
+            <circle cx="6" cy="6" r="5" stroke="var(--red)" stroke-width="1.1"/>
+            <path d="M4 4l4 4M8 4l-4 4" stroke="var(--red)" stroke-width="1.1" stroke-linecap="round"/>
+          </svg>
+          <span class="ap-final-label ap-final-label-err">任务中断</span>
+          <svg class="ap-final-chev" :class="{ open: outOpen }" width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M3 2l4 3-4 3" stroke="var(--text3)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div v-if="outOpen" class="ap-final-body markdown-body" v-html="finalOutput"></div>
+      </div>
+
+      <!-- Final output: auto-expanded when done -->
+      <div v-if="!running && finalOutput && !interrupted" class="ap-final">
+        <div class="ap-final-hdr" @click="outOpen = !outOpen">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" class="ap-final-ok">
+            <circle cx="6" cy="6" r="5" stroke="var(--green)" stroke-width="1.1"/>
+            <path d="M3.8 6.2l1.5 1.5 3-3.2" stroke="var(--green)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="ap-final-label">任务完成</span>
+          <svg class="ap-final-chev" :class="{ open: outOpen }" width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M3 2l4 3-4 3" stroke="var(--text3)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div v-if="outOpen" class="ap-final-body markdown-body" v-html="finalOutput"></div>
+      </div>
     </div>
   </div>
 </template>
@@ -78,9 +138,13 @@ const props = defineProps({
   events: { type: Array, default: () => [] },
   running: { type: Boolean, default: false },
   startTime: { type: Number, default: 0 },
+  finalOutput: { type: String, default: '' },
+  interrupted: { type: Boolean, default: false },
 })
 
 const expanded = ref(false)
+const outOpen = ref(false)
+const thinkOpen = ref(true)  // thinking starts open
 const tNow = ref(Date.now())
 let _ti = null
 let _ct = null
@@ -93,7 +157,9 @@ watch(() => props.running, v => {
     _ti = setInterval(() => { tNow.value = Date.now() }, 1000)
   } else {
     clearInterval(_ti); _ti = null
-    _ct = setTimeout(() => { expanded.value = false }, 4000)
+    _ct = setTimeout(() => { expanded.value = false }, 8000)
+    // Auto-expand completed output so the user can see the result
+    if (props.finalOutput) outOpen.value = true
   }
 }, { immediate: true })
 
@@ -110,9 +176,34 @@ const timerText = computed(() => {
 
 const allDone = computed(() => !props.running && props.events.length > 1)
 
+// Active thinking text: stream continuously, switch to auto-collapse after tools start
+const activeThinking = computed(() => {
+  const ev = props.events || []
+  if (!props.running && !props.interrupted) return ''
+  // Find the last thinking event, even during tool execution
+  let lastThink = ''
+  for (let i = ev.length - 1; i >= 0; i--) {
+    if (ev[i].type === 'thinking' && ev[i].text && !lastThink) {
+      lastThink = ev[i].text
+      break
+    }
+  }
+  return lastThink
+})
+
+const hasToolsStarted = computed(() => {
+  return (props.events || []).some(e => e.type === 'tool_start')
+})
+
+// Auto-close thinking when tools start, but keep visible during pure thinking phase
+watch(hasToolsStarted, (val) => {
+  if (val) thinkOpen.value = false
+})
+
 // ═══ Summary ═══
 const summaryText = computed(() => {
   const ev = props.events || []
+  if (props.interrupted) return '任务中断'
   if (!props.running && ev.length > 1) {
     const d = ev.find(e => e.type === 'done' || e.type === 'final')
     if (d?.text) return d.text.split(/[.\n]/)[0].slice(0, 50) || '任务完成'
@@ -163,7 +254,7 @@ const steps = computed(() => {
     }
   }
   if (props.running && out.length === 0) {
-    out.push({ _k: 'init', _nar: true, _text: '正在分析任务...' })
+    out.push({ _k: 'init', _nar: true, _text: '正在思考中...' })
   }
   return out
 })
@@ -196,8 +287,10 @@ function hintFor(tool, args) {
   margin: 6px 0;
 }
 .ap-root.running { border-color: rgba(79,125,255,.16); }
+.ap-root.interrupted { border-color: rgba(248,81,73,.25); }
 
 /* header */
+.ap-hdr-sum-err { color: var(--red) !important; }
 .ap-hdr {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; padding: 7px 12px; gap: 10px;
@@ -277,6 +370,17 @@ function hintFor(tool, args) {
   white-space: pre-wrap; word-break: break-all; line-height: 1.55;
 }
 
+/* thinking display */
+.ap-think { margin: 0 4px 4px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: rgba(79,125,255,0.04); }
+.ap-think-hdr { display: flex; align-items: center; gap: 6px; padding: 5px 10px; cursor: pointer; user-select: none; transition: background .12s; }
+.ap-think-hdr:hover { background: var(--bg3); }
+.ap-think-dot { flex-shrink: 0; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.ap-think-label { font-size: 11px; font-weight: 500; color: var(--accent); letter-spacing: .3px; }
+.ap-think-chev { flex-shrink: 0; opacity: .5; transition: transform .15s; margin-left: auto; }
+.ap-think-chev.open { transform: rotate(180deg); opacity: .8; }
+.ap-think-body { padding: 4px 10px 8px; font-size: 12px; line-height: 1.55; color: var(--text3); white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow-y: auto; font-style: italic; }
+
 /* narration: gray italic */
 .ap-nar-text {
   padding: 2px 10px 2px 26px;
@@ -295,6 +399,33 @@ function hintFor(tool, args) {
   50% { opacity: 1; transform: scaleX(1); transform-origin: left; }
   100% { opacity: 0; transform: scaleX(0); transform-origin: right; }
 }
+
+/* interrupted warning */
+.ap-interrupted {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 4px 4px 8px; padding: 10px 12px;
+  background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.2);
+  border-radius: 6px;
+}
+.ap-interrupted-title { font-size: 13px; font-weight: 500; color: var(--red); }
+.ap-interrupted-desc { font-size: 11px; color: var(--text3); margin-top: 2px; font-weight: 300; }
+
+/* final output */
+.ap-final { border-top: 1px solid var(--border); }
+.ap-final-interrupted { border-top: 1px solid rgba(248,81,73,.2); }
+.ap-final-err { flex-shrink: 0; }
+.ap-final-label-err { color: var(--red) !important; }
+.ap-final-hdr {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; cursor: pointer; user-select: none;
+  transition: background .12s;
+}
+.ap-final-hdr:hover { background: var(--bg3); }
+.ap-final-ok { flex-shrink: 0; }
+.ap-final-label { font-size: 11px; font-weight: 500; color: var(--green); letter-spacing: .3px; text-transform: uppercase; }
+.ap-final-chev { flex-shrink: 0; opacity: .5; transition: transform .15s; margin-left: auto; }
+.ap-final-chev.open { transform: rotate(180deg); opacity: .8; }
+.ap-final-body { padding: 8px 12px 12px; font-size: 13px; line-height: 1.65; color: var(--text); max-height: 320px; overflow-y: auto; }
 
 /* fade transition */
 .step-fade-enter-active { animation: fadeSlide .25s ease both; }

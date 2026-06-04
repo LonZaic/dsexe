@@ -207,7 +207,11 @@ const emptyText = computed(() => {
   return searchQuery.value ? t('noMatchConvs') : t('noConvs')
 })
 
-function goHome() { router.push('/') }
+function goHome() {
+  store.currentId = null
+  store._saveSession()
+  router.push('/')
+}
 async function newChat() {
   if (isAgentRoute.value) {
     await agStore.createConversation('Agent 对话')

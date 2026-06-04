@@ -22,7 +22,7 @@ const L = {
 
   // ── Brand & Nav ──
   brand:           ['DeepSeek-Super', 'DeepSeek-Super', 'DeepSeek-Super', 'DeepSeek-Super'],
-  home:            ['主页', '主頁', '首頁', 'Home'],
+  home:            ['聊天', '聊天', '聊天', 'Chat'],
   newChat:         ['新对话', '新對話', '新對話', 'New Chat'],
   apiKey:          ['API Key', 'API Key', 'API Key', 'API Key'],
   email:           ['邮箱', '電郵', '電子郵件', 'Email'],
@@ -90,6 +90,10 @@ const L = {
   agentWebSearch:  ['搜索网络中...', '搜尋網絡中...', '搜尋網路中...', 'Searching web...'],
   agentProcessing: ['正在处理...', '正在處理...', '正在處理...', 'Processing...'],
   agentDone:       ['任务完成', '任務完成', '任務完成', 'Task completed'],
+  agentThinking:    ['正在思考中...', '正在思考中...', '正在思考中...', 'Thinking...'],
+  agentInterrupted: ['任务中断', '任務中斷', '任務中斷', 'Task Interrupted'],
+  agentInterruptedDesc: ['Agent 工作被中断，任务未完成', 'Agent 工作被中斷，任務未完成', 'Agent 工作被中斷，任務未完成', 'Agent was interrupted, task incomplete'],
+  agentSummary:     ['任务总结', '任務總結', '任務總結', 'Summary'],
   agentRound:      ['轮', '輪', '輪', 'rounds'],
   agentRounds:     ['轮数', '輪數', '輪數', 'Rounds'],
   agentHooks:      ['钩子', '掛鉤', '鉤子', 'Hooks'],

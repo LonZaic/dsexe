@@ -2,9 +2,9 @@
   <div class="app-shell">
     <AppSidebar />
     <main class="main-area">
-      <router-view v-slot="{ Component }">
+      <router-view v-slot="{ Component, route: r }">
         <transition name="fade-up" mode="out-in">
-          <component :is="Component" />
+          <component :is="Component" :key="r.fullPath" />
         </transition>
       </router-view>
     </main>

@@ -65,13 +65,11 @@ export const useAgentConversationStore = defineStore('agentConversation', {
           text: r.text || '',
           html: r.text || '',
           events: safeParse(r.events),
+          finalOutput: r.role === 'agent-progress' ? (r.text || '') : '',
           running: false,
-          collapsed: true, // default collapsed for loaded history
-          summary: summaryFromEvents(safeParse(r.events)),
           startTime: 0,
           thinking: '',
           thinkingOpen: false,
-          canContinue: false,  // only newly-run agents get the continue button
         }))
       }
       this.currentId = id
@@ -85,6 +83,18 @@ export const useAgentConversationStore = defineStore('agentConversation', {
       if (!this.messagesMap[id]) this.openConversation(id)
       this.currentId = id
       this._saveSession()
+    },
+
+    // ─── Mark conversation as interrupted ───
+    markInterrupted(id) {
+      const msgs = this.messagesMap[id] || []
+      for (const m of msgs) {
+        if (m.role === 'agent-progress' && m.running !== false) {
+          m.running = false
+          m.interrupted = true
+        }
+      }
+      this.messagesMap[id] = [...msgs]
     },
 
     // ─── Close tab ───
@@ -191,10 +201,4 @@ export const useAgentConversationStore = defineStore('agentConversation', {
 
 function safeParse(s) {
   try { return JSON.parse(s) } catch { return [] }
-}
-
-function summaryFromEvents(events) {
-  if (!events || !events.length) return ''
-  const d = events.find(e => e.type === 'done' || e.type === 'final')
-  return d?.text ? d.text.split(/[.\n]/)[0].slice(0, 60) : ''
 }
