@@ -32,9 +32,10 @@ function createApp() {
   const distPath = path.join(__dirname, '..', 'dist')
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath))
-    // SPA fallback: non-API routes → index.html
-    app.get('*', (req, res) => {
-      if (req.path.startsWith('/api/') || req.path.startsWith('/ws')) return
+    // SPA fallback: non-API routes → index.html (Express 5 syntax)
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api/') || req.path.startsWith('/ws')) return next()
+      if (req.method !== 'GET') return next()
       res.sendFile(path.join(distPath, 'index.html'))
     })
   }
