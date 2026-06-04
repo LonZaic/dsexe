@@ -1,0 +1,144 @@
+// ══════════════════════════════════════
+// Code Mode API Routes
+// ══════════════════════════════════════
+
+const { Router } = require('express')
+const fs = require('fs')
+const path = require('path')
+const os = require('os')
+const { executeCodeTask } = require('../codeAgent')
+const { initFollow, readFollow, searchFollowBM25 } = require('../followManager')
+const { initTask, readTask } = require('../taskManager')
+
+const router = Router()
+const WORKSPACE = process.env.AGENT_WORKSPACE || os.homedir()
+
+// ─── Scan file tree ───
+router.post('/code/filetree', (req, res) => {
+  try {
+    const { projectPath } = req.body
+    const dir = projectPath || WORKSPACE
+    if (!fs.existsSync(dir)) return res.json({ tree: [], error: 'Path not found' })
+    const tree = scanDir(dir, 3)
+    res.json({ tree })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Read file content ───
+router.post('/code/read-file', (req, res) => {
+  try {
+    const { filePath } = req.body
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' })
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const name = path.basename(filePath)
+    res.json({ filePath, name, content, lines: content.split('\n').length })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Create new project folder ───
+router.post('/code/new-project', (req, res) => {
+  try {
+    const { projectPath, projectName } = req.body
+    const fullPath = projectPath || path.join(WORKSPACE, projectName || 'NewProject')
+    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true })
+    initFollow(fullPath)
+    initTask(fullPath)
+    const tree = scanDir(fullPath, 2)
+    res.json({ projectPath: fullPath, projectName: path.basename(fullPath), tree })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Run code agent (SSE) ───
+router.post('/code/run', async (req, res) => {
+  const { task, projectPath, model = 'deepseek-v4-pro' } = req.body
+  const apiKey = req.headers['x-api-key'] || process.env.DEEPSEEK_API_KEY || ''
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  })
+
+  const send = (data) => {
+    if (res.writableEnded) return
+    res.write(`data: ${JSON.stringify(data)}\n\n`)
+  }
+  const abortController = new AbortController()
+  res.on('close', () => abortController.abort())
+
+  try {
+    await executeCodeTask({
+      projectPath, task, apiKey, model,
+      onProgress: (event) => { send(event) },
+      signal: abortController.signal
+    })
+  } catch (e) {
+    send({ type: 'error', text: e.message })
+  }
+  send({ type: 'done', text: '' })
+  res.end()
+})
+
+// ─── Get Follow.md ───
+router.post('/code/follow', (req, res) => {
+  try {
+    const { projectPath } = req.body
+    const content = readFollow(projectPath)
+    res.json({ content })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Search Follow.md ───
+router.post('/code/follow-search', (req, res) => {
+  try {
+    const { projectPath, query } = req.body
+    const results = searchFollowBM25(projectPath, query)
+    res.json({ results })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Get Task.md ───
+router.post('/code/task', (req, res) => {
+  try {
+    const { projectPath } = req.body
+    const content = readTask(projectPath)
+    res.json({ content })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─── Helper: recursive directory scan ───
+function scanDir(dir, maxDepth, depth = 0) {
+  const results = []
+  if (depth > maxDepth) return results
+  try {
+    const items = fs.readdirSync(dir, { withFileTypes: true })
+    for (const item of items) {
+      if (item.name.startsWith('.') || item.name === 'node_modules') continue
+      const fullPath = path.join(dir, item.name)
+      results.push({
+        name: item.name,
+        path: fullPath,
+        isDir: item.isDirectory(),
+        depth,
+      })
+      if (item.isDirectory()) {
+        results.push(...scanDir(fullPath, maxDepth, depth + 1))
+      }
+    }
+  } catch {}
+  return results
+}
+
+module.exports = router

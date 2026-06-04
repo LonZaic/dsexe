@@ -119,6 +119,28 @@ export async function initDB() {
             created_at  TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (conv_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS
+        code_conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT DEFAULT 'Code 对话',
+            project_path TEXT DEFAULT '',
+            project_name TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS
+        code_messages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            conv_id     TEXT NOT NULL,
+            role        TEXT NOT NULL,
+            text        TEXT DEFAULT '',
+            html        TEXT DEFAULT '',
+            thinking    TEXT DEFAULT '',
+            tasks_json  TEXT DEFAULT '[]',
+            created_at  TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (conv_id) REFERENCES code_conversations(id) ON DELETE CASCADE
+        );
     `)
 
     // migration: add columns if they don't exist on older DBs
@@ -326,5 +348,63 @@ export function updateAgentConversationTitle(id, title) {
 export function deleteAgentConversation(id) {
   db.run('DELETE FROM agent_messages WHERE conv_id = ?', [id])
   db.run('DELETE FROM agent_conversations WHERE id = ?', [id])
+  saveDB()
+}
+
+// ══════════════════════════════════════
+// Code Conversations
+// ══════════════════════════════════════
+
+export function createCodeConversation(id, title, projectPath, projectName) {
+  db.run('INSERT INTO code_conversations (id, title, project_path, project_name) VALUES (?, ?, ?, ?)',
+    [id, title || 'Code 对话', projectPath || '', projectName || ''])
+  saveDB()
+}
+
+export function getCodeConversations() {
+  const stmt = db.prepare('SELECT * FROM code_conversations ORDER BY created_at DESC')
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function getCodeMessages(convId) {
+  const stmt = db.prepare('SELECT * FROM code_messages WHERE conv_id = ? ORDER BY id ASC')
+  stmt.bind([convId])
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function addCodeMessage(convId, role, text, html, thinking, tasksJson) {
+  db.run('INSERT INTO code_messages (conv_id, role, text, html, thinking, tasks_json) VALUES (?, ?, ?, ?, ?, ?)',
+    [convId, role, text || '', html || '', thinking || '', tasksJson || '[]'])
+  saveDB()
+  const r = db.exec("SELECT last_insert_rowid()")
+  return Number(r[0].values[0][0])
+}
+
+export function updateCodeMessage(id, text, html, thinking, tasksJson) {
+  db.run('UPDATE code_messages SET text = ?, html = ?, thinking = ?, tasks_json = ? WHERE id = ?',
+    [text || '', html || '', thinking || '', tasksJson || '[]', id])
+  saveDB()
+}
+
+export function updateCodeConversationTitle(id, title) {
+  db.run('UPDATE code_conversations SET title = ? WHERE id = ?', [title, id])
+  saveDB()
+}
+
+export function updateCodeConversationProject(id, projectPath, projectName) {
+  db.run('UPDATE code_conversations SET project_path = ?, project_name = ? WHERE id = ?',
+    [projectPath || '', projectName || '', id])
+  saveDB()
+}
+
+export function deleteCodeConversation(id) {
+  db.run('DELETE FROM code_messages WHERE conv_id = ?', [id])
+  db.run('DELETE FROM code_conversations WHERE id = ?', [id])
   saveDB()
 }

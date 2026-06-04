@@ -12,6 +12,11 @@ const routes = [
     component: () => import('../pages/AgentView.vue')
   },
   {
+    path: '/code',
+    name: 'code',
+    component: () => import('../pages/CodeView.vue')
+  },
+  {
     path: '/chat/:id',
     name: 'chat',
     component: () => import('../pages/HomeView.vue')

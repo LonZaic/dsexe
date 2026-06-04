@@ -10,12 +10,32 @@
       </div>
     </div>
 
-    <button class="new-chat-btn" @click="newChat">
+    <!-- ═══ Code Mode: header ═══ -->
+    <div v-if="isCodeRoute" class="code-hdr">
+      <button class="back-btn" @click="$router.push('/')">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="code-hdr-name">{{ codeProjectName || t('codeNoProj') }}</span>
+    </div>
+
+    <!-- ═══ Code Mode: File Tree (flex fills space) ═══ -->
+    <div v-if="isCodeRoute && codeProjectPath" class="code-ft-wrap">
+      <FileTree
+        :tree="codeFileTree"
+        :active-file="codeActiveFile"
+        @select-file="onCodeFileSelect"
+      />
+    </div>
+    <div v-else-if="isCodeRoute && !codeProjectPath" class="code-ft-wrap">
+      <div class="code-no-proj">{{ t('codeOpenHint') }}</div>
+    </div>
+
+    <button v-if="!isCodeRoute" class="new-chat-btn" @click="newChat">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       {{ isAgentRoute ? '新 Agent' : t('newChat') }}
     </button>
 
-    <div class="nav-section">
+    <div v-if="!isCodeRoute" class="nav-section">
       <button class="nav-item" :class="{ active: route.path === '/' }" @click="goHome">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 6.5L7.5 2 13 6.5V13H9.5v-3.5h-4V13H2V6.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
         {{ t('home') }}
@@ -24,10 +44,9 @@
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7.5a2 2 0 114 0 2 2 0 01-4 0z" stroke="currentColor" stroke-width="1.3"/><path d="M9 9l3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         {{ t('agentMode') }}
       </button>
-      <button class="nav-item disabled">
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M3 2h9a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M5 5l5 5M10 5l-5 5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
-        Code
-        <span class="nav-badge">SOON</span>
+      <button class="nav-item" :class="{ active: route.path === '/code' }" @click="$router.push('/code')">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M4 2h7l2 2v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M5 6l2 2-2 2M8 10h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        {{ t('code') }}
       </button>
       <button class="nav-item" @click="openSettings('api')">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 7.5h6M2 11h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="11.5" cy="10" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13.5 12l1 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -50,7 +69,7 @@
     </div>
 
     <!-- Search -->
-    <div class="recents-header">
+    <div v-if="!isCodeRoute" class="recents-header">
       <div class="search-box">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="3.5" stroke="currentColor" stroke-width="1.2"/><path d="M7.5 7.5L10.5 10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         <input v-model="searchQuery" class="search-input" :placeholder="t('searchConvs')" @click.stop />
@@ -60,11 +79,11 @@
       </div>
     </div>
 
-    <div class="recents-list">
+    <div v-if="!isCodeRoute" class="recents-list">
       <div
         v-for="conv in displayConvs"
         :key="conv.id"
-        :class="['recent-item', { active: isAgentRoute ? conv.id === agStore.currentId : conv.id === store.currentId }]"
+        :class="['recent-item', { active: isCodeRoute ? conv.id === codeStore.currentId : isAgentRoute ? conv.id === agStore.currentId : conv.id === store.currentId }]"
         @click="openChat(conv.id)"
         @contextmenu.prevent="openCtxMenu($event, conv)"
       >
@@ -105,6 +124,31 @@
     </div>
 
     <div class="sidebar-bottom">
+      <!-- ═══ Code Mode: history button (same row as lang) ═══ -->
+      <div v-if="isCodeRoute" class="code-hist-wrap">
+        <button class="lang-btn" @click="showCodeHist = !showCodeHist" style="justify-content:flex-start">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.1"/><path d="M7 4v3.5L9 9" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          <span>{{ t('codeProjectConvs') }}</span>
+          <span class="code-hist-count" v-if="projectConvs.length" style="margin-left:auto">{{ projectConvs.length }}</span>
+        </button>
+        <Transition name="hist-pop">
+          <div v-if="showCodeHist" class="code-hist-popup">
+            <div class="code-hist-list">
+              <div v-for="conv in projectConvs" :key="conv.id"
+                :class="['code-hist-item', { active: conv.id === codeStore.currentId }]"
+                @click="openCodeConv(conv.id); showCodeHist = false">
+                <span class="code-hist-title">{{ conv.title }}</span>
+                <span class="code-hist-date">{{ formatDate(conv.created_at) }}</span>
+                <button class="code-hist-del" @click.stop="deleteCodeConv(conv.id)">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                </button>
+              </div>
+              <div v-if="!projectConvs.length" class="code-hist-empty">{{ t('noConvs') }}</div>
+            </div>
+          </div>
+        </Transition>
+      </div>
+
       <!-- ═══ Language Switcher Dropdown ═══ -->
       <div class="lang-switcher" ref="langSwitcherRef">
         <button class="lang-btn" @click="showLangMenu = !showLangMenu" :title="t('switchLang')">
@@ -156,20 +200,26 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../../store/chatStore.js'
 import { useAgentConversationStore } from '../../stores/agentConversationStore.js'
+import { useCodeStore } from '../../stores/codeStore.js'
 import { isLoggedIn, logout } from '../../api/index.js'
 import { disconnect } from '../../api/ws.js'
 import { useI18n } from '../../composables/useI18n.js'
+import FileTree from '../code/FileTree.vue'
 
 const router = useRouter()
 const route = useRoute()
 const store = useChatStore()
 const agStore = useAgentConversationStore()
+const codeStore = useCodeStore()
 const { t, lang, setLang, langDisplay, LANG_META, isZh } = useI18n()
 
 const isAgentRoute = computed(() => route.path === '/agent')
+const isCodeRoute = computed(() => route.path === '/code')
+const { projectPath: codeProjectPath, fileTree: codeFileTree, projectName: codeProjectName, activeFilePath: codeActiveFile } = storeToRefs(codeStore)
 const loggedIn = ref(isLoggedIn())
 const apiKeySet = ref(false)
 const keyMode = ref('builtin')
@@ -193,6 +243,11 @@ const userName = computed(() => { try { return JSON.parse(localStorage.getItem('
 
 const displayConvs = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
+  if (isCodeRoute.value) {
+    const list = codeStore.conversations || []
+    if (!q) return list
+    return list.filter(c => (c.title || '').toLowerCase().includes(q))
+  }
   if (isAgentRoute.value) {
     const list = agStore.conversations || []
     if (!q) return list
@@ -203,6 +258,7 @@ const displayConvs = computed(() => {
 })
 
 const emptyText = computed(() => {
+  if (isCodeRoute.value) return t('codeNoConvs')
   if (isAgentRoute.value) return '暂无 Agent 对话'
   return searchQuery.value ? t('noMatchConvs') : t('noConvs')
 })
@@ -213,18 +269,46 @@ function goHome() {
   router.push('/')
 }
 async function newChat() {
-  if (isAgentRoute.value) {
+  if (isCodeRoute.value) {
+    codeStore.createConversation(t('codeDefaultConv'))
+  } else if (isAgentRoute.value) {
     await agStore.createConversation('Agent 对话')
   } else {
     const id = 'conv_' + Date.now(); await store.createConversation(id); router.push('/chat/' + id)
   }
 }
 function openChat(id) {
-  if (isAgentRoute.value) {
+  if (isCodeRoute.value) {
+    codeStore.switchTab(id)
+  } else if (isAgentRoute.value) {
     agStore.switchTab(id)
   } else {
     store.switchTab(id); router.push('/chat/' + id)
   }
+}
+
+function onCodeFileSelect(item) {
+  codeStore.openFile(item.path, item.name, '')
+}
+
+// ─── Code history popup ───
+const showCodeHist = ref(false)
+const projectConvs = computed(() => {
+  if (!codeProjectPath.value) return []
+  return (codeStore.conversations || []).filter(c => c.project_path === codeProjectPath.value)
+})
+
+function openCodeConv(id) {
+  codeStore.openConversation(id)
+}
+
+function deleteCodeConv(id) {
+  codeStore.deleteConversation(id)
+}
+
+function formatDate(d) {
+  if (!d) return ''
+  try { return new Date(d).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
 }
 function doLogout() { logout(); disconnect(); loggedIn.value = false; router.push('/') }
 
@@ -239,7 +323,10 @@ function startRename(conv) {
 }
 function doRename() {
   if (renameText.value.trim() && renameId.value) {
-    if (isAgentRoute.value) {
+    if (isCodeRoute.value) {
+      const conv = codeStore.conversations.find(c => c.id === renameId.value)
+      if (conv) conv.title = renameText.value.trim()
+    } else if (isAgentRoute.value) {
       agStore.renameConversation(renameId.value, renameText.value.trim())
     } else {
       store.updateConvTitle(renameId.value, renameText.value.trim())
@@ -257,7 +344,10 @@ function cancelDelete() { deleting.value = null }
 function doDelete() {
   if (!deleting.value) return
   const id = deleting.value.id
-  if (isAgentRoute.value) {
+  if (isCodeRoute.value) {
+    codeStore.closeTab(id)
+    router.push('/code')
+  } else if (isAgentRoute.value) {
     agStore.deleteConversation(id)
     router.push('/agent')
   } else {
@@ -301,11 +391,65 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.sidebar { width: var(--sidebar-w); height: 100vh; height: 100dvh; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+.sidebar { width: var(--sidebar-w); height: 100vh; height: 100dvh; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; will-change: width; }
 .sidebar-top { padding: 16px 12px 8px; display: flex; align-items: center; justify-content: space-between; }
 .logo { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 500; color: var(--text); letter-spacing: -0.3px; cursor: pointer; user-select: none; }
 .new-chat-btn { margin: 4px 12px 10px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 300; transition: background .15s, color .15s, border-color .15s; width: calc(100% - 24px); }
 .new-chat-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+.back-btn {
+  width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+  border: none; background: transparent; color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.back-btn:hover { background: var(--bg3); color: var(--text); }
+
+/* Code mode header */
+.code-hdr {
+  display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px;
+}
+.code-hdr-name {
+  font-size: 13px; font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.code-ft-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.code-no-proj { padding: 16px; text-align: center; font-size: 11px; color: var(--text3); font-weight: 300; }
+
+/* Code history */
+.code-hist-wrap { position: relative; }
+.code-hist-count {
+  font-size: 10px; padding: 1px 6px;
+  border-radius: var(--radius-full); background: var(--accent-muted); color: var(--accent);
+  flex-shrink: 0;
+}
+.code-hist-popup {
+  position: absolute; bottom: 100%; left: 4px; right: 4px; margin-bottom: 4px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.35);
+  z-index: var(--z-dropdown); max-height: 240px; overflow-y: auto;
+}
+.code-hist-list { padding: 4px; }
+.code-hist-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; color: var(--text2); transition: background .1s;
+}
+.code-hist-item:hover { background: var(--bg3); }
+.code-hist-item.active { background: rgba(79,125,255,.08); color: var(--accent); }
+.code-hist-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 300; }
+.code-hist-date { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+.code-hist-del {
+  width: 18px; height: 18px; border-radius: 3px; flex-shrink: 0;
+  border: none; background: transparent; color: var(--text3); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; opacity: 0; transition: all .1s;
+}
+.code-hist-item:hover .code-hist-del { opacity: 1; }
+.code-hist-del:hover { background: rgba(248,81,73,.1); color: var(--red); }
+.code-hist-empty { padding: 12px; text-align: center; font-size: 11px; color: var(--text3); }
+
+.hist-pop-enter-active { animation: histIn .15s ease both; transform-origin: bottom center; }
+.hist-pop-leave-active { animation: histOut .1s ease both; transform-origin: bottom center; }
+@keyframes histIn { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes histOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(6px) scale(.96); } }
 .nav-section { padding: 0 8px 4px; }
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 14px; font-weight: 300; transition: background .12s, color .12s; border: none; background: transparent; width: 100%; font-family: inherit; text-align: left; }
 .nav-item:hover { background: var(--bg3); color: var(--text); }
