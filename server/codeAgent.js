@@ -24,20 +24,27 @@ const TOOLS = [
   { type: 'function', function: { name: 'run_command', description: 'Execute shell command', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
 ]
 
-// ─── Tool executors ───
+// ─── Resolve tool path relative to project root ───
+function resolvePath(inputPath, projectRoot) {
+  if (!inputPath) return projectRoot
+  if (path.isAbsolute(inputPath)) return inputPath
+  return path.resolve(projectRoot, inputPath)
+}
+
+// ─── Tool executors (scoped to projectPath) ───
 const executors = require('./agent').executors || {}
-// Fallback: inline basic executor
-function executeTool(name, args) {
+function executeTool(name, args, projectRoot) {
+  const root = projectRoot || WORKSPACE
   try {
     switch (name) {
       case 'list_files': {
-        const dir = args.dir || WORKSPACE
+        const dir = resolvePath(args.dir || '.', root)
         if (!fs.existsSync(dir)) return `Dir not found: ${dir}`
         return fs.readdirSync(dir, { withFileTypes: true })
           .map(i => `${i.isDirectory() ? '[DIR]' : '[FILE]'} ${i.name}${i.isDirectory() ? '/' : ''}`).join('\n') || '(empty)'
       }
       case 'read_file': {
-        const fp = args.path
+        const fp = resolvePath(args.path, root)
         if (!fs.existsSync(fp)) return `File not found: ${fp}`
         const lines = fs.readFileSync(fp, 'utf-8').split('\n')
         const off = Math.max(0, (args.offset || 1) - 1)
@@ -45,13 +52,13 @@ function executeTool(name, args) {
         return lines.slice(off, off + lim).map((l, i) => `${String(off + i + 1).padStart(4)}| ${l}`).join('\n')
       }
       case 'write_file': {
-        const fp = args.path; const dir = path.dirname(fp)
+        const fp = resolvePath(args.path, root); const dir = path.dirname(fp)
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
         fs.writeFileSync(fp, args.content, 'utf-8')
         return `[OK] Wrote ${fp} (${args.content.length} chars)`
       }
       case 'edit_file': {
-        const fp = args.path; const content = fs.readFileSync(fp, 'utf-8')
+        const fp = resolvePath(args.path, root); const content = fs.readFileSync(fp, 'utf-8')
         if (!content.includes(args.old_string)) return `[ERROR] old_string not found in ${fp}`
         const nc = content.replace(args.old_string, args.new_string)
         fs.writeFileSync(fp, nc, 'utf-8')
@@ -63,11 +70,11 @@ function executeTool(name, args) {
         function scan(d) {
           try { for (const i of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, i.name); if (i.name.startsWith('.')) continue; if (i.isDirectory()) scan(f); else if (re.test(i.name)) results.push(f) } } catch {}
         }
-        scan(args.path ? path.resolve(args.path) : WORKSPACE)
+        scan(resolvePath(args.path || '.', root))
         return results.slice(0, 100).join('\n') || 'No matches'
       }
       case 'grep': {
-        const results = []; const searchDir = args.path || WORKSPACE
+        const results = []; const searchDir = resolvePath(args.path || '.', root)
         function scan(d) {
           try { for (const i of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, i.name); if (i.name.startsWith('.')) continue; if (i.isDirectory()) scan(f); else { try { const lines = fs.readFileSync(f, 'utf-8').split('\n'); for (let j = 0; j < lines.length; j++) { if (lines[j].toLowerCase().includes(args.pattern.toLowerCase())) results.push(`${f}:${j + 1}: ${lines[j].trim().slice(0, 120)}`) } } catch {} } } } catch {}
         }
@@ -75,7 +82,7 @@ function executeTool(name, args) {
       }
       case 'run_command': {
         const { execSync } = require('child_process')
-        return execSync(args.command, { cwd: WORKSPACE, timeout: 30000, encoding: 'utf-8', shell: true }).trim() || '(ok)'
+        return execSync(args.command, { cwd: root, timeout: 30000, encoding: 'utf-8', shell: true }).trim() || '(ok)'
       }
       default: return `Unknown tool: ${name}`
     }
@@ -266,7 +273,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
         // For file edits, capture diff for UI
         if (name === 'edit_file' && args.path) {
           const oldContent = fs.existsSync(args.path) ? fs.readFileSync(args.path, 'utf-8') : ''
-          const result = executeTool(name, args)
+          const result = executeTool(name, args, projectPath)
           // Emit diff info for the frontend
           if (!result.startsWith('[ERROR]')) {
             const oldLines = oldContent.split('\n')
@@ -284,7 +291,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
           toolResults += result + '\n'
           onProgress({ type: 'tool_result', tool: name, result: result.slice(0, 300) })
         } else if (name === 'write_file' && args.path) {
-          const result = executeTool(name, args)
+          const result = executeTool(name, args, projectPath)
           onProgress({
             type: 'code_diff',
             filePath: args.path,
@@ -297,7 +304,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
           messages.push({ role: 'tool', tool_call_id: tc.id, content: result })
           onProgress({ type: 'tool_result', tool: name, result: result.slice(0, 300) })
         } else {
-          const result = executeTool(name, args)
+          const result = executeTool(name, args, projectPath)
           messages.push({ role: 'tool', tool_call_id: tc.id, content: result })
           onProgress({ type: 'tool_result', tool: name, result: String(result).slice(0, 300) })
           toolResults += String(result).slice(0, 200) + '\n'

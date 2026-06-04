@@ -59,11 +59,12 @@ router.post('/code/run', async (req, res) => {
   const { task, projectPath, model = 'deepseek-v4-pro' } = req.body
   const apiKey = req.headers['x-api-key'] || process.env.DEEPSEEK_API_KEY || ''
 
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  })
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  if (res.socket) res.socket.setNoDelay(true)
+  res.flushHeaders()
 
   const send = (data) => {
     if (res.writableEnded) return

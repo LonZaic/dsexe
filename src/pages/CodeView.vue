@@ -497,10 +497,15 @@ async function send() {
     await runCodeAgent(txt, store.projectPath, codeModel.value, async (event) => {
       const e = event
       if (e.type === 'thinking' && e.text) {
-        // Stream text into message body like chat mode
+        // Stream text into message body like chat mode — real-time character output
         aiMsg.text = (aiMsg.text || '') + e.text
-        aiMsg.html = renderMarkdown(aiMsg.text)
-        if (dbId > 0) store.updateMessageText(dbId, aiMsg.text, aiMsg.html, aiMsg.thinking)
+        // Show raw text during streaming (fast), render markdown only on done
+        aiMsg.html = aiMsg.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
+        const now = Date.now()
+        if (dbId > 0 && (!aiMsg._lastDb || now - aiMsg._lastDb > 3000)) {
+          store.updateMessageText(dbId, aiMsg.text, aiMsg.html, aiMsg.thinking)
+          aiMsg._lastDb = now
+        }
       }
       if (e.type === 'code_diff') {
         store.addDiff({
