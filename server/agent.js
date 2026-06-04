@@ -389,7 +389,23 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
   }
   agentContext.hooksFired++
 
-  // ─── Step 2: Find relevant memories (CC side-query pattern) ───
+  // ─── Step 2: Load recent conversation context ───
+  let recentContext = ''
+  try {
+    const ctxFile = path.join(MEMORY_DIR, '_recent_context.json')
+    if (fs.existsSync(ctxFile)) {
+      const ctxData = JSON.parse(fs.readFileSync(ctxFile, 'utf-8'))
+      if (ctxData.entries && ctxData.entries.length > 0) {
+        recentContext = '## Recent Conversation History\n\n'
+        for (const entry of ctxData.entries.slice(-5)) {
+          recentContext += `**Q**: ${entry.task}\n**A**: ${(entry.summary || entry.result || '').slice(0, 500)}\n\n`
+        }
+        recentContext += '---\nUse the above context to maintain continuity. Reference past tasks when relevant.\n'
+      }
+    }
+  } catch {}
+
+  // ─── Step 3: Find relevant memories (CC side-query pattern) ───
   let relevantMemories = []
   try {
     relevantMemories = await findRelevantMemories(effectiveTask, MEMORY_DIR, apiKey, signal)
@@ -435,6 +451,9 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
 
   // ─── Step 6: Build initial messages ───
   let taskMessage = `## Task\n\n${effectiveTask}\n\nStart by exploring the relevant paths. Use list_files to understand what you are working with, then complete the task thoroughly. Remember: read before you write, verify after you change, and stop when done.`
+  if (recentContext) {
+    taskMessage = recentContext + '\n' + taskMessage
+  }
   if (memoryContextMessage) {
     taskMessage = memoryContextMessage + '\n' + taskMessage
   }
@@ -720,6 +739,25 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
   // ─── Post-processing: non-critical, fire after streaming ───
   const duration = Date.now() - startTime
   onProgress({ type: 'stats', rounds, hooksFired: agentContext.hooksFired, memoriesFound: agentContext.memoriesFound, budgetUsed: budgetTracker.getStatus().used, duration })
+
+  // ─── Save recent context for next session ───
+  try {
+    const ctxFile = path.join(MEMORY_DIR, '_recent_context.json')
+    let ctxData = { entries: [] }
+    if (fs.existsSync(ctxFile)) {
+      try { ctxData = JSON.parse(fs.readFileSync(ctxFile, 'utf-8')) } catch {}
+    }
+    if (!ctxData.entries) ctxData.entries = []
+    ctxData.entries.push({
+      task: effectiveTask,
+      summary: (finalResult || '').slice(0, 800),
+      result: (finalResult || '').slice(0, 2000),
+      rounds,
+      timestamp: new Date().toISOString()
+    })
+    if (ctxData.entries.length > 20) ctxData.entries = ctxData.entries.slice(-20)
+    fs.writeFileSync(ctxFile, JSON.stringify(ctxData, null, 2), 'utf-8')
+  } catch {}
 
   // PostAgentStop hooks (fire-and-forget)
   executePostAgentStop(hooksConfig, messages, finalResult, agentContext).catch(() => {})

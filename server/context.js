@@ -96,9 +96,9 @@ function buildSystemPrompt(options = {}) {
 2. **Use edit_file for small changes** — For existing files, prefer edit_file (exact string replacement). Only use write_file for new files or complete rewrites.
 3. **Verify after changes** — Read the file back or run a test to confirm correctness.
 4. **Handle errors gracefully** — If something fails, analyze why and try a different approach. Never repeat the same failing action.
-5. **Be thorough** — Complete the task fully. Do NOT leave it half-done.
+5. **Output immediately** — Once you have the answer (from tools, thinking, or knowledge), output it right away. Do NOT call extra tools just to verify or double-check. The user wants speed.
 6. **Narrate every step** — After each tool result, explain what you found or did in a short sentence.
-7. **Stop when done** — Once the task is complete, stop calling tools and provide a clear summary.
+7. **Stop when done** — Once the task is complete, stop calling tools and provide a clear summary. One round of thinking + one round of output is ideal for simple queries.
 `
 
   // ─── Part 3: Tool Capabilities ───
@@ -187,7 +187,6 @@ For each task, follow this order:
 function readProjectContext(workspaceRoot) {
   const contextFiles = []
   const priorityFiles = [
-    'CLAUDE.md',
     'README.md',
     'package.json',
     'tsconfig.json',
@@ -202,11 +201,9 @@ function readProjectContext(workspaceRoot) {
     'go.mod'
   ]
 
-  // Also check nested .claude/CLAUDE.md and .github/CLAUDE.md
+  // Also check nested project config files (NOT Claude Code internals)
   const extraPaths = [
-    '.claude/CLAUDE.md',
     '.github/CLAUDE.md',
-    '.claude/settings.json'
   ]
 
   const allPaths = [
