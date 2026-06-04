@@ -38,13 +38,11 @@ app.config.errorHandler = (err, vm, info) => {
 }
 
 // Mount app
-// Only init client-side sql.js when NOT logged in (logged-in users use server API)
+// Always init client-side sql.js — needed for agent conversations persistence
 const token = localStorage.getItem('bbot_token')
-if (!token) {
-  await initDB().catch(err => {
-    console.error('DB init failed:', err)
-  })
-}
+await initDB().catch(err => {
+  console.error('DB init failed:', err)
+})
 app.mount('#app')
 
 // Ensure session state is persisted on page close/refresh

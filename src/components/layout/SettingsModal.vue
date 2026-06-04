@@ -19,7 +19,9 @@
             <span class="radio-title">{{ t('cloudKey') }}</span>
             <span class="radio-desc">{{ t('cloudKeyDesc') }}</span>
           </div>
-          <span v-if="keyMode === 'builtin'" class="radio-check">✓</span>
+          <svg v-if="keyMode === 'builtin'" class="radio-check-svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7.5l2.5 2.5L11 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </label>
 
         <!-- Option 2: Own key -->
@@ -29,7 +31,9 @@
             <span class="radio-title">{{ t('ownKey') }}</span>
             <span class="radio-desc">{{ t('ownKeyDesc') }}</span>
           </div>
-          <span v-if="keyMode === 'own'" class="radio-check">✓</span>
+          <svg v-if="keyMode === 'own'" class="radio-check-svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7.5l2.5 2.5L11 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </label>
 
         <!-- Own key input -->
@@ -420,7 +424,7 @@ select.form-input { cursor: pointer; appearance: auto; padding-right: 28px; }
 .radio-title { font-size: 14px; color: var(--text); font-weight: 400; }
 .radio-desc { font-size: 11px; color: var(--text3); font-weight: 300; }
 .radio-card.active .radio-desc { color: var(--text2); }
-.radio-check { color: var(--accent); font-size: 14px; font-weight: 600; flex-shrink: 0; }
+.radio-check-svg { color: var(--accent); flex-shrink: 0; }
 
 /* Warning */
 .warn-msg {

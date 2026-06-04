@@ -12,7 +12,7 @@
 
     <button class="new-chat-btn" @click="newChat">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      {{ t('newChat') }}
+      {{ isAgentRoute ? '新 Agent' : t('newChat') }}
     </button>
 
     <div class="nav-section">
@@ -62,9 +62,9 @@
 
     <div class="recents-list">
       <div
-        v-for="conv in filteredConvs"
+        v-for="conv in displayConvs"
         :key="conv.id"
-        :class="['recent-item', { active: conv.id === store.currentId }]"
+        :class="['recent-item', { active: isAgentRoute ? conv.id === agStore.currentId : conv.id === store.currentId }]"
         @click="openChat(conv.id)"
         @contextmenu.prevent="openCtxMenu($event, conv)"
       >
@@ -78,8 +78,7 @@
           </button>
         </div>
       </div>
-      <div v-if="!filteredConvs.length && !store.conversations.length" class="recents-empty">{{ t('noConvs') }}</div>
-      <div v-else-if="!filteredConvs.length" class="recents-empty">{{ t('noMatchConvs') }}</div>
+      <div v-if="!displayConvs.length" class="recents-empty">{{ emptyText }}</div>
     </div>
 
     <!-- Delete confirm dialog -->
@@ -156,9 +155,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useChatStore } from '../../store/chatStore.js'
+import { useAgentConversationStore } from '../../stores/agentConversationStore.js'
 import { isLoggedIn, logout } from '../../api/index.js'
 import { disconnect } from '../../api/ws.js'
 import { useI18n } from '../../composables/useI18n.js'
@@ -166,7 +166,10 @@ import { useI18n } from '../../composables/useI18n.js'
 const router = useRouter()
 const route = useRoute()
 const store = useChatStore()
+const agStore = useAgentConversationStore()
 const { t, lang, setLang, langDisplay, LANG_META, isZh } = useI18n()
+
+const isAgentRoute = computed(() => route.path === '/agent')
 const loggedIn = ref(isLoggedIn())
 const apiKeySet = ref(false)
 const keyMode = ref('builtin')
@@ -188,15 +191,37 @@ const currentLangLabel = computed(() => langDisplay(lang.value))
 
 const userName = computed(() => { try { return JSON.parse(localStorage.getItem('bbot_user')).name } catch { return null } })
 
-const filteredConvs = computed(() => {
+const displayConvs = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return store.conversations
-  return store.conversations.filter(c => (c.title || '').toLowerCase().includes(q))
+  if (isAgentRoute.value) {
+    const list = agStore.conversations || []
+    if (!q) return list
+    return list.filter(c => (c.title || '').toLowerCase().includes(q))
+  }
+  if (!q) return store.conversations || []
+  return (store.conversations || []).filter(c => (c.title || '').toLowerCase().includes(q))
+})
+
+const emptyText = computed(() => {
+  if (isAgentRoute.value) return '暂无 Agent 对话'
+  return searchQuery.value ? t('noMatchConvs') : t('noConvs')
 })
 
 function goHome() { router.push('/') }
-async function newChat() { const id = 'conv_' + Date.now(); await store.createConversation(id); router.push('/chat/' + id) }
-function openChat(id) { store.switchTab(id); router.push('/chat/' + id) }
+async function newChat() {
+  if (isAgentRoute.value) {
+    await agStore.createConversation('Agent 对话')
+  } else {
+    const id = 'conv_' + Date.now(); await store.createConversation(id); router.push('/chat/' + id)
+  }
+}
+function openChat(id) {
+  if (isAgentRoute.value) {
+    agStore.switchTab(id)
+  } else {
+    store.switchTab(id); router.push('/chat/' + id)
+  }
+}
 function doLogout() { logout(); disconnect(); loggedIn.value = false; router.push('/') }
 
 function selectLang(code) { setLang(code); showLangMenu.value = false }
@@ -210,7 +235,11 @@ function startRename(conv) {
 }
 function doRename() {
   if (renameText.value.trim() && renameId.value) {
-    store.updateConvTitle(renameId.value, renameText.value.trim())
+    if (isAgentRoute.value) {
+      agStore.renameConversation(renameId.value, renameText.value.trim())
+    } else {
+      store.updateConvTitle(renameId.value, renameText.value.trim())
+    }
   }
   renaming.value = false; renameId.value = null; renameText.value = ''
 }
@@ -224,10 +253,15 @@ function cancelDelete() { deleting.value = null }
 function doDelete() {
   if (!deleting.value) return
   const id = deleting.value.id
-  store.deleteConv(id)
-  if (store.currentId === id) {
-    if (store.openTabs.length) { router.push('/chat/' + store.openTabs[0]) }
-    else router.push('/')
+  if (isAgentRoute.value) {
+    agStore.deleteConversation(id)
+    router.push('/agent')
+  } else {
+    store.deleteConv(id)
+    if (store.currentId === id) {
+      if (store.openTabs.length) { router.push('/chat/' + store.openTabs[0]) }
+      else router.push('/')
+    }
   }
   deleting.value = null
 }
@@ -244,11 +278,17 @@ function onOutsideClick(e) {
 
 onMounted(() => {
   store.loadApiKey(); store.loadConversations()
+  agStore.loadConversations()
   apiKeySet.value = store.apikey.length > 0
   keyMode.value = localStorage.getItem('key_mode') || 'builtin'
   loggedIn.value = isLoggedIn()
   setInterval(() => { loggedIn.value = isLoggedIn(); apiKeySet.value = store.apikey.length > 0; keyMode.value = localStorage.getItem('key_mode') || 'builtin' }, 2000)
   document.addEventListener('click', onOutsideClick)
+})
+
+// Reload agent conversations when entering agent route
+watch(isAgentRoute, (v) => {
+  if (v) agStore.loadConversations()
 })
 
 onUnmounted(() => {

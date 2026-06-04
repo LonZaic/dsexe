@@ -1,6 +1,5 @@
 // ══════════════════════════════════════
 // useAgent — composable for agent orchestration
-// Extracts agent logic from ChatView for reuse
 // ══════════════════════════════════════
 
 import { ref, computed } from 'vue'
@@ -16,8 +15,7 @@ export function useAgent(convId) {
   const events = computed(() => agentStore.agentEvents(convId))
 
   /**
-   * Start an agent run for personal conversation.
-   * Returns a promise that resolves when the agent finishes.
+   * Start an agent run. Returns a promise that resolves when the agent finishes.
    */
   async function startAgent(task, model, permissionMode = 'default') {
     const cid = convId || chatStore.currentId
@@ -37,27 +35,32 @@ export function useAgent(convId) {
     try {
       await runAgent(task, model, permissionMode, (event) => {
         agentStore.addAgentEvent(cid, event)
+        // Forward all events to the chat store for AgentProgress rendering
+        const currentEvts = agentStore.agentEvents(cid)
+        chatStore.updateStreamAgentEvents(tempId, [...currentEvts])
 
         switch (event.type) {
           case 'thinking':
+            if (event.text && !fullText) {
+              chatStore.appendStreamText(tempId, event.text)
+            }
             break
           case 'final_chunk':
             fullText += event.text
-            chatStore.appendStreamText(tempId, fullText)
+            chatStore.updateStreamCleanText(tempId, fullText)
             break
           case 'done':
-            fullText = event.text
-            chatStore.updateStreamCleanText(tempId, fullText)
+          case 'final':
+            if (event.text) {
+              fullText = event.text
+              chatStore.updateStreamCleanText(tempId, fullText)
+            }
             break
           case 'error':
             chatStore.appendStreamText(tempId, `\n\nError: ${event.text}`)
             break
-          case 'final':
-            fullText = event.text
-            chatStore.updateStreamCleanText(tempId, fullText)
-            break
         }
-      })
+      }, controller.signal)
 
       chatStore.finishStreamReply(tempId)
       agentStore.finishAgent(cid)
@@ -90,7 +93,7 @@ export function useAgent(convId) {
         } else if (event.type === 'final') {
           fullText = event.text
         }
-      })
+      }, controller.signal)
 
       agentStore.finishAgent(cid)
       return fullText

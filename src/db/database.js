@@ -101,6 +101,24 @@ export async function initDB() {
             created_at  TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (conv_id) REFERENCES conversations(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS
+        agent_conversations (
+            id TEXT PRIMARY KEY,
+            title TEXT DEFAULT 'Agent 对话',
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS
+        agent_messages (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            conv_id     TEXT NOT NULL,
+            role        TEXT NOT NULL,
+            text        TEXT DEFAULT '',
+            events      TEXT DEFAULT '[]',
+            created_at  TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (conv_id) REFERENCES agent_conversations(id) ON DELETE CASCADE
+        );
     `)
 
     // migration: add columns if they don't exist on older DBs
@@ -260,4 +278,53 @@ export function deleteMessage(id) {
 export function deleteMessagesSince(convId, sinceId) {
     db.run('DELETE FROM messages WHERE conv_id = ? AND id > ?', [convId, sinceId])
     saveDB()
+}
+
+// ══════════════════════════════════════
+// Agent Conversations
+// ══════════════════════════════════════
+
+export function createAgentConversation(id, title) {
+  db.run('INSERT INTO agent_conversations (id, title) VALUES (?, ?)', [id, title || 'Agent 对话'])
+  saveDB()
+}
+
+export function getAgentConversations() {
+  const stmt = db.prepare('SELECT * FROM agent_conversations ORDER BY created_at DESC')
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function getAgentMessages(convId) {
+  const stmt = db.prepare('SELECT * FROM agent_messages WHERE conv_id = ? ORDER BY id ASC')
+  stmt.bind([convId])
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function addAgentMessage(convId, role, text, events) {
+  db.run('INSERT INTO agent_messages (conv_id, role, text, events) VALUES (?, ?, ?, ?)',
+    [convId, role, text || '', events || '[]'])
+  saveDB()
+}
+
+export function updateAgentMessage(id, text, events) {
+  db.run('UPDATE agent_messages SET text = ?, events = ? WHERE id = ?',
+    [text || '', events || '[]', id])
+  saveDB()
+}
+
+export function updateAgentConversationTitle(id, title) {
+  db.run('UPDATE agent_conversations SET title = ? WHERE id = ?', [title, id])
+  saveDB()
+}
+
+export function deleteAgentConversation(id) {
+  db.run('DELETE FROM agent_messages WHERE conv_id = ?', [id])
+  db.run('DELETE FROM agent_conversations WHERE id = ?', [id])
+  saveDB()
 }

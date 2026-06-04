@@ -4,7 +4,9 @@
             <!-- thinking / reasoning -->
             <div v-if="role === 'ai' && reasoning" class="thinking-box">
                 <div class="thinking-head" @click="toggleThinking">
-                    <span class="thinking-arrow">{{ thinkingOpen ? 'v' : '>' }}</span>
+                    <svg :class="['thinking-arrow-svg', { open: thinkingOpen }]" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
                     <span class="thinking-label">{{ t('thinkingProcess') }}</span>
                 </div>
                 <div v-if="thinkingOpen" class="thinking-body">{{ reasoning }}</div>
@@ -45,7 +47,9 @@
                 <!-- collapsible raw output -->
                 <div v-if="rawText" class="raw-output">
                     <div class="raw-output-head" @click="showRaw = !showRaw">
-                        <span class="raw-output-arrow">{{ showRaw ? '▼' : '▶' }}</span>
+                        <svg :class="['raw-output-arrow-svg', { open: showRaw }]" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
                         <span class="raw-output-label">{{ t('viewGenProcess') }}</span>
                     </div>
                     <div v-if="showRaw" class="raw-output-body">{{ rawText }}</div>
@@ -65,42 +69,23 @@
                 <!-- collapsible raw output during drawing -->
                 <div v-if="rawText" class="raw-output">
                     <div class="raw-output-head" @click="showRaw = !showRaw">
-                        <span class="raw-output-arrow">{{ showRaw ? '▼' : '▶' }}</span>
+                        <svg :class="['raw-output-arrow-svg', { open: showRaw }]" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
                         <span class="raw-output-label">{{ t('viewGenProcess') }}</span>
                     </div>
                     <div v-if="showRaw" class="raw-output-body">{{ rawText }}</div>
                 </div>
             </template>
 
-            <!-- ═══ AI: Agent mode — clean, like drawing mode ═══ -->
+            <!-- ═══ AI: Agent mode — inline progress + narration ═══ -->
             <template v-else-if="role === 'ai' && isAgent">
-                <!-- Agent status bar: SVG icon + phase text with light sweep + timer -->
-                <div class="agent-status" :class="{ 'agent-done': agentDone }" @click="showAgentLog = !showAgentLog">
-                    <svg class="agent-svg" viewBox="0 0 24 24" width="16" height="16" v-if="!agentDone">
-                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="62" stroke-dashoffset="20">
-                            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="3s" repeatCount="indefinite"/>
-                        </circle>
-                        <circle cx="12" cy="7" r="2" fill="currentColor" opacity="0.6">
-                            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
-                        </circle>
-                    </svg>
-                    <svg class="agent-svg" viewBox="0 0 24 24" width="16" height="16" v-else>
-                        <circle cx="12" cy="12" r="10" fill="none" stroke="var(--green)" stroke-width="1.5"/>
-                        <polyline points="7,12 11,16 17,8" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="agent-phase-text" :class="{ 'agent-shimmer': !agentDone }">{{ agentPhase }}</span>
-                    <span class="agent-timer" v-if="!agentDone && agentDuration > 0">{{ formatDuration(agentDuration) }}</span>
-                    <span class="agent-timer done" v-else-if="agentDone && agentDuration > 0">{{ formatDuration(agentDuration) }}</span>
-                </div>
-                <!-- Collapsible tool details (hidden by default, click to see) -->
-                <div v-if="showAgentLog && agentToolCalls.length" class="agent-details">
-                    <div v-for="(step, i) in agentToolCalls" :key="i" class="agent-step">
-                        <span class="agent-step-dot" :class="{ done: step.done }"></span>
-                        <span class="agent-step-act">{{ step.label }}</span>
-                        <span class="agent-step-det">{{ step.detail }}</span>
-                    </div>
-                </div>
-                <!-- AI's narration text (streaming) -->
+                <AgentProgress
+                    :events="agentEvents"
+                    :running="!agentDone"
+                    :startTime="agentStartTime"
+                />
+                <!-- AI's narration text (streaming summary) -->
                 <div v-if="text" class="bubble markdown-body" v-html="renderedText"></div>
                 <span v-if="streaming && !text" class="stream-cursor"></span>
             </template>
@@ -159,15 +144,42 @@
 
             <!-- branch version navigator -->
             <div v-if="role === 'ai' && !streaming && siblingCount > 1" class="branch-nav">
-                <button class="branch-btn" :title="t('prevVersion')" @click="$emit('prevBranch')">&lt;</button>
+                <button class="branch-btn" :title="t('prevVersion')" @click="$emit('prevBranch')">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M7 2L3 5l4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
                 <span class="branch-num">{{ siblingIndex }}/{{ siblingCount }}</span>
-                <button class="branch-btn" :title="t('nextVersion')" @click="$emit('nextBranch')">&gt;</button>
+                <button class="branch-btn" :title="t('nextVersion')" @click="$emit('nextBranch')">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
             </div>
             <div class="msg-actions" v-if="!streaming && text">
-                <button v-if="role === 'ai'" :title="t('regenerate')" @click="$emit('regenerate')">⟳</button>
-                <button :title="t('copy')" @click="copyText">⎘</button>
-                <button v-if="role === 'user'" :title="t('editMsg')" @click="$emit('edit', text)">✎</button>
-                <button :title="t('delete')" class="del" @click="$emit('delete')">✕</button>
+                <button v-if="role === 'ai'" :title="t('regenerate')" @click="$emit('regenerate')">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M1.5 3.5V7.5H5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M11.5 9.5V5.5H7.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M10.18 3.73a5 5 0 0 0-7.2-.48L1.5 4.5M11.5 8.5l-1.48 1.25a5 5 0 0 1-7.2-.48" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button :title="t('copy')" @click="copyText">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                    <path d="M2.5 9V2.5A1 1 0 0 1 3.5 1.5H9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                  </svg>
+                </button>
+                <button v-if="role === 'user'" :title="t('editMsg')" @click="$emit('edit', text)">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M9.5 1.5a1 1 0 0 1 1.41 0l.59.59a1 1 0 0 1 0 1.41L5 10l-2.5.5L3 8l6.5-6.5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button :title="t('delete')" class="del" @click="$emit('delete')">
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M2.5 3.5h8M4.5 3.5V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M2 3.5h9v.5a.5.5 0 0 1-.5.5h-.5l-.4 6a.5.5 0 0 1-.5.5H3.9a.5.5 0 0 1-.5-.5l-.4-6H2.5a.5.5 0 0 1-.5-.5V3.5z" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
             </div>
         </div>
     </div>
@@ -180,6 +192,7 @@ import { loadFile } from '../utils/fileDB.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { guessDeviceType, DEVICES } from '../utils/designPreview.js'
 import { useI18n } from '../composables/useI18n.js'
+import AgentProgress from './chat/AgentProgress.vue'
 
 const { t } = useI18n()
 
@@ -218,7 +231,6 @@ async function previewFile(f) {
 const thinkingOpen = ref(false)
 const userToggled = ref(false)
 const showRaw = ref(false)
-const showAgentLog = ref(false)
 
 const isAgent = computed(() => {
   return props.agentEvents && props.agentEvents.length > 0
@@ -226,78 +238,17 @@ const isAgent = computed(() => {
 
 const agentDone = computed(() => {
   const evts = props.agentEvents || []
-  return evts.some(e => e.type === 'done' || e.type === 'final')
+  return evts.some(e => e.type === 'done' || e.type === 'final' || e.type === 'error' || e.type === 'aborted')
 })
 
-const agentDuration = computed(() => {
+// Extract start time from events (set by ChatView as first event)
+const agentStartTime = computed(() => {
   const evts = props.agentEvents || []
-  const stats = evts.find(e => e.type === 'stats')
-  return stats?.duration || 0
-})
-
-const agentPhase = computed(() => {
-  if (!isAgent.value) return ''
-  const evts = props.agentEvents || []
-
-  if (evts.some(e => e.type === 'error')) return t('agentError')
-  if (evts.some(e => e.type === 'aborted')) return t('agentAborted')
-  if (agentDone.value) return t('agentComplete')
-
-  // Use AI's own thinking text as the phase label (first sentence)
-  const thinks = [...evts].reverse().filter(e => e.type === 'thinking')
-  if (thinks.length > 0) {
-    const t0 = thinks[thinks.length - 1].text?.trim() || ''
-    const firstSentence = t0.split(/[。！？\n.!?]/)[0].trim()
-    if (firstSentence.length > 2 && firstSentence.length < 80) return firstSentence
-  }
-
-  const last = evts[evts.length - 1]
-  if (!last) return t('agentAnalyzing')
-  if (last.type === 'context') return t('agentUnderstanding')
-  if (last.type === 'tool_start') {
-    const labels = {
-      list_files: t('agentBrowsing'), read_file: t('agentReading'), write_file: t('agentWriting'),
-      edit_file: t('agentEditing'), glob: t('agentSearching'), grep: t('agentSearchingCode'),
-      run_command: t('agentRunning'), web_search: t('agentWebSearch'),
-    }
-    return labels[last.tool] || t('agentProcessing')
-  }
-  return t('agentAnalyzing')
-})
-
-const agentToolCalls = computed(() => {
-  if (!isAgent.value) return []
-  const evts = props.agentEvents || []
-  const steps = []
-  let toolIdx = 0
   for (const e of evts) {
-    if (e.type === 'tool_start') {
-      const name = e.tool || ''
-      const detail = e.args?.path || e.args?.pattern || e.args?.query || e.args?.command || e.args?.dir || ''
-      const labels = { list_files: t('actBrowse'), read_file: t('actRead'), write_file: t('actWrite'), edit_file: t('actEdit'), glob: t('actSearch'), grep: t('actFind'), run_command: t('actRun'), web_search: t('actWeb') }
-      steps.push({ label: labels[name]||name, detail, done: true })
-      toolIdx++
-    }
+    if (e._startTime) return e._startTime
   }
-  // Mark the last step as in-progress if not done
-  if (steps.length > 0 && !agentDone.value) {
-    steps[steps.length - 1].done = false
-  }
-  return steps
+  return 0
 })
-
-// Auto-open on new steps, close when done
-watch(() => props.agentEvents?.length, (n, o) => { if (n > 0 && o === 0) showAgentLog.value = true })
-watch(agentDone, (done) => { if (done) { setTimeout(() => { showAgentLog.value = false }, 2000) } })
-
-function formatDuration(ms) {
-  if (!ms || ms < 0) return ''
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}m${sec}s`
-}
 
 watch(() => props.reasoning, (val) => {
     if (val && !props.text && !userToggled.value) {
@@ -428,7 +379,8 @@ async function copyText() {
 .thinking-box { border-left: 2px solid var(--accent-muted); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-bottom: 6px; padding-left: 8px; }
 .thinking-head { display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; padding: 2px 0; }
 .thinking-head:hover { color: var(--text2); }
-.thinking-arrow { font-size: 10px; width: 10px; flex-shrink: 0; color: var(--text3); }
+.thinking-arrow-svg { flex-shrink: 0; color: var(--text3); transition: transform 0.15s ease; }
+.thinking-arrow-svg.open { transform: rotate(90deg); }
 .thinking-label { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: 0.3px; }
 .thinking-body {
     font-size: 12px; line-height: 1.55; color: var(--text3);
@@ -458,24 +410,6 @@ async function copyText() {
 /* ─── stream cursor ─── */
 .stream-cursor { display: inline-block; width: 6px; height: 14px; margin-left: 2px; background: var(--primary); animation: blink 0.8s infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-
-/* ─── agent scan shine ─── */
-/* Streaming bubble — subtle, no blue block */
-.msg.ai.streaming .bubble {
-  position: relative;
-  overflow: hidden;
-}
-/* Only a very subtle shimmer on the text side */
-.msg.ai.streaming .bubble::after {
-  content: '';
-  position: absolute;
-  top: 0; left: -50%;
-  width: 25%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
-  animation: textSweep 2.5s ease-in-out infinite;
-  pointer-events: none;
-}
 
 /* ─── message actions ─── */
 .msg-actions { display: flex; gap: 3px; margin-top: 3px; opacity: 0; transition: opacity 0.12s; }
@@ -563,69 +497,7 @@ async function copyText() {
     color: var(--text2);
 }
 
-/* ─── Agent status bar — clean, like drawing mode ─── */
-.agent-status {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; margin-bottom: 4px;
-  border-radius: 8px;
-  cursor: pointer; user-select: none;
-  transition: background 0.2s;
-}
-.agent-status:hover { background: var(--bg3); }
-.agent-status.agent-done { cursor: default; }
-.agent-svg { flex-shrink: 0; color: var(--primary); width: 16px; height: 16px; }
-.agent-done .agent-svg { color: var(--green); }
-.agent-phase-text {
-  flex: 1; font-size: 12px; font-weight: 500; color: var(--text2);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-/* Light sweep on text only — no blue block */
-.agent-shimmer {
-  position: relative;
-}
-.agent-shimmer::after {
-  content: '';
-  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
-  animation: textSweep 2s ease-in-out infinite;
-}
-@keyframes textSweep {
-  0% { left: -60%; }
-  100% { left: 120%; }
-}
-.agent-timer {
-  font-size: 10px; color: var(--text3); flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-.agent-timer.done { color: var(--green); }
-
-/* Collapsible tool details */
-.agent-details {
-  margin: 2px 0 6px 24px; padding: 4px 8px;
-  border-left: 1px solid var(--border);
-  max-height: 160px; overflow-y: auto;
-}
-.agent-step {
-  display: flex; align-items: baseline; gap: 6px;
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 10px; line-height: 1.5; padding: 2px 0;
-  opacity: 0.6;
-}
-.agent-step-dot {
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--primary); flex-shrink: 0; margin-top: 4px;
-}
-.agent-step-dot.done { background: var(--text3); }
-.agent-step-act { color: var(--text2); flex-shrink: 0; }
-.agent-step-det { color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ═══════════════════════════════
-   Collapsible raw output viewer
-   ═══════════════════════════════ */
-
-.raw-output {
-    margin-top: 6px;
-}
+.raw-output { margin-top: 6px; }
 .raw-output-head {
     display: flex;
     align-items: center;
@@ -635,10 +507,10 @@ async function copyText() {
     padding: 2px 0;
 }
 .raw-output-head:hover { color: var(--text2); }
-.raw-output-arrow {
-    font-size: 9px; width: 10px; flex-shrink: 0;
-    color: var(--text3);
+.raw-output-arrow-svg {
+    flex-shrink: 0; color: var(--text3); transition: transform 0.15s ease;
 }
+.raw-output-arrow-svg.open { transform: rotate(90deg); }
 .raw-output-label {
     font-size: 11px; font-weight: 600;
     color: var(--text3); letter-spacing: 0.3px;

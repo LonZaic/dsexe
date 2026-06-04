@@ -54,6 +54,9 @@ async function chatStream(req, res) {
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  if (res.socket) res.socket.setNoDelay(true)
+  res.flushHeaders()
 
   try {
     const response = await fetch(DEEPSEEK_API_BASE, {

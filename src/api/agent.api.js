@@ -11,139 +11,133 @@ function authHeaders(extra = {}) {
 
 /**
  * Run a personal agent task via SSE stream.
- * Returns an object with { abort, promise } to control the stream.
+ * Returns a Promise that resolves when the agent completes.
+ * Caller can abort via the signal.
  */
-export function runAgent(task, model, permissionMode = 'default', onEvent) {
-  const controller = new AbortController()
-
-  const promise = fetch(`${BASE_URL}/api/agent/run`, {
+export async function runAgent(task, model, permissionMode = 'default', onEvent, signal) {
+  const response = await fetch(`${BASE_URL}/api/agent/run`, {
     method: 'POST',
     headers: authHeaders({ 'x-permission-mode': permissionMode }),
     body: JSON.stringify({ task, model }),
-    signal: controller.signal,
-  }).then(async response => {
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (trimmed.startsWith('data:')) {
-          try {
-            const data = JSON.parse(trimmed.slice(5).trim())
-            onEvent(data)
-          } catch { /* skip malformed */ }
-        }
-      }
-    }
+    signal,
   })
 
-  return {
-    abort: () => controller.abort(),
-    promise,
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('data:')) {
+        try {
+          const data = JSON.parse(trimmed.slice(5).trim())
+          await onEvent(data)   // yield to let Vue flush DOM between events
+        } catch { /* skip malformed */ }
+      }
+    }
   }
 }
 
 /**
- * Run a group agent task.
+ * Run a group agent task via SSE stream.
  */
-export function runGroupAgent(task, roomId, model, permissionMode = 'default', onEvent) {
-  const controller = new AbortController()
-
-  const promise = fetch(`${BASE_URL}/api/agent/group-run`, {
+export async function runGroupAgent(task, roomId, model, permissionMode = 'default', onEvent, signal) {
+  const response = await fetch(`${BASE_URL}/api/agent/group-run`, {
     method: 'POST',
     headers: authHeaders({ 'x-permission-mode': permissionMode }),
     body: JSON.stringify({ task, roomId, model }),
-    signal: controller.signal,
-  }).then(async response => {
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (trimmed.startsWith('data:')) {
-          try {
-            const data = JSON.parse(trimmed.slice(5).trim())
-            onEvent(data)
-          } catch { /* skip malformed */ }
-        }
-      }
-    }
+    signal,
   })
 
-  return {
-    abort: () => controller.abort(),
-    promise,
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('data:')) {
+        try {
+          const data = JSON.parse(trimmed.slice(5).trim())
+          await onEvent(data)   // yield to let Vue flush DOM between events
+        } catch { /* skip malformed */ }
+      }
+    }
   }
 }
 
 /**
  * AI chat (streaming SSE).
+ * Returns a Promise that resolves with { reply, reasoning }.
  */
-export function aiChatStream(messages, model, onChunk, onDone) {
-  const controller = new AbortController()
-
-  const promise = fetch(`${BASE_URL}/api/ai/chat/stream`, {
+export async function aiChatStream(messages, model, onChunk, onDone, signal) {
+  const response = await fetch(`${BASE_URL}/api/ai/chat/stream`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ messages, model }),
-    signal: controller.signal,
-  }).then(async response => {
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (trimmed.startsWith('data:')) {
-          const payload = trimmed.slice(5).trim()
-          if (payload === '[DONE]') {
-            onDone?.()
-            return
-          }
-          try {
-            const data = JSON.parse(payload)
-            onChunk(data)
-          } catch { /* skip */ }
-        }
-      }
-    }
-    onDone?.()
+    signal,
   })
 
-  return { abort: () => controller.abort(), promise }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let replyText = ''
+  let reasoningText = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('data:')) {
+        const payload = trimmed.slice(5).trim()
+        if (payload === '[DONE]') {
+          onDone?.({ reply: replyText, reasoning: reasoningText })
+          return { reply: replyText, reasoning: reasoningText }
+        }
+        try {
+          const data = JSON.parse(payload)
+          const delta = data.choices?.[0]?.delta
+          if (delta?.reasoning_content) reasoningText += delta.reasoning_content
+          if (delta?.content) replyText += delta.content
+          onChunk?.({ reply: replyText, reasoning: reasoningText })
+        } catch { /* skip */ }
+      }
+    }
+  }
+  onDone?.({ reply: replyText, reasoning: reasoningText })
+  return { reply: replyText, reasoning: reasoningText }
+}
+
+export async function judgeTask(task, context) {
+  return client.post('/api/agent/judge', { task, context })
 }
 
 export const agentApi = {
   runAgent,
   runGroupAgent,
   aiChatStream,
-  judgeTask: (task, context) => client.post('/api/agent/judge', { task, context }),
+  judgeTask,
   getMemory: () => client.get('/api/agent/memory'),
   saveMemory: (name, description, type, content) =>
     client.post('/api/agent/memory', { name, description, type, content }),

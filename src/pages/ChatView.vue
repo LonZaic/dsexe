@@ -1,8 +1,6 @@
 <template>
     <div class="chat-area">
 
-            <AgentPanel ref="agentPanelRef" :visible="agentPanelVisible" :events="agentEvents" @close="agentPanelVisible = false" />
-
             <VirtualList ref="virtualListRef" :items="store.visibleMessages" :estimated-height="60" key-field="id">
                 <template #item="{ item }">
                     <MessageBubble
@@ -99,7 +97,6 @@ import { buildDesignPrompt, parseDesignBlocks, cleanDesignMarkers, cleanDesignMa
 import { initEmailScheduler } from '../utils/email.js'
 import VirtualList from '../components/VirtualList.vue'
 import MessageBubble from '../components/MessageBubble.vue'
-import AgentPanel from '../components/AgentPanel.vue'
 import InputBar from '../components/layout/InputBar.vue'
 import CodePanel from '../components/chat/CodePanel.vue'
 import AppIcon from '../components/common/AppIcon.vue'
@@ -116,9 +113,6 @@ const virtualListRef = ref(null)
 const textareaRef = ref(null)
 const fileInput = ref(null)
 const previewSrc = ref(null)
-const agentPanelVisible = ref(false)
-const agentEvents = ref([])
-const agentPanelRef = ref(null)
 const inputBarRef = ref(null)
 const codePanelVisible = ref(false)
 const codePanelTabs = ref([])
@@ -574,20 +568,23 @@ async function sendToAgent(task) {
         return
     }
 
+    // Clean up any previous agent state for this conversation
+    if (agentAbortMap[convId]) {
+        agentAbortMap[convId].abort()
+        delete agentAbortMap[convId]
+    }
+
     // Mark this conversation as having an agent running
     agentRunningMap[convId] = true
     agentTimerMap[convId] = Date.now()
     startAgentTimer()
 
-    store.addUserMessage('[Agent] ' + task, [])
+    // User message shows as a bubble (no [Agent] prefix in agent mode)
+    await store.addUserMessage(task, [])
     inputText.value = ''
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
-    store.setLoading(true, convId)
 
     const tempId = store.startStreamReply(convId)
-    agentEvents.value = []
-    agentPanelVisible.value = true
-    if (agentPanelRef.value) agentPanelRef.value.start()
 
     // Create abort controller for THIS agent run
     const abortCtrl = new AbortController()
@@ -596,7 +593,8 @@ async function sendToAgent(task) {
     let logText = ''
     let finalStreamedText = ''
     function push(t) { logText += t; store.updateStreamCleanText(tempId, logText) }
-    const collected = []
+    const startTime = Date.now()
+    const collected = [{ _startTime: startTime }]
     try {
         const res = await fetch('/api/agent/run', {
             method: 'POST',
@@ -622,8 +620,7 @@ async function sendToAgent(task) {
                 let evt
                 try { evt = JSON.parse(trimmed.slice(5).trim()) } catch { continue }
                 collected.push(evt)
-                agentEvents.value = [...collected]
-                store.updateStreamAgentEvents(tempId, collected)
+                store.updateStreamAgentEvents(tempId, [...collected])
                 // AI's real-time narration
                 if (evt.type === 'thinking' && evt.text) {
                     if (!logText) push(evt.text)
@@ -646,8 +643,7 @@ async function sendToAgent(task) {
             push('\n\nerror: ' + e.message)
             collected.push({ type: 'error', text: e.message })
         }
-        agentEvents.value = [...collected]
-        store.updateStreamAgentEvents(tempId, collected)
+        store.updateStreamAgentEvents(tempId, [...collected])
     }
 
     store.setLoading(false, convId)
@@ -670,7 +666,6 @@ async function sendToAgent(task) {
     if (Object.keys(agentRunningMap).length === 0) {
         stopAgentTimer()
     }
-    agentPanelVisible.value = false
 }
 
 async function _doSend(text) {
