@@ -59,14 +59,14 @@ function closeSidebar() {
     mobileOpen.value = false
 }
 
-function newConversation() {
+async function newConversation() {
     closeSidebar()
     if (!store.apikey) {
         alert('请先输入 API Key')
         return
     }
     const id = 'conv_' + Date.now()
-    store.createConversation(id)
+    await store.createConversation(id)
     router.push('/chat/' + id)
 }
 

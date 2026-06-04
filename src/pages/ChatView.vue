@@ -49,6 +49,25 @@
                 @toggle-model-menu="showModelMenu = !showModelMenu"
             />
 
+            <!-- Model selector dropdown -->
+            <div v-if="showModelMenu" class="model-backdrop" @click="showModelMenu = false"></div>
+            <Transition name="drop">
+              <div v-if="showModelMenu" class="model-menu" @click.stop>
+                <button
+                  v-for="m in MODELS"
+                  :key="m.id"
+                  :class="['model-opt', { active: store.model === m.id }]"
+                  @click="selectModel(m.id)"
+                >
+                  <span class="model-opt-name">{{ m.label }}</span>
+                  <span class="model-opt-desc">{{ m.desc }}</span>
+                  <svg v-if="store.model === m.id" width="14" height="14" viewBox="0 0 14 14" fill="none" class="model-check">
+                    <path d="M3 7.5l2.5 2.5L11 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </Transition>
+
             <!-- Image preview overlay -->
             <div v-if="previewSrc" class="preview-overlay" @click.self="previewSrc = null">
                 <button class="preview-close" @click="previewSrc = null">
@@ -75,6 +94,7 @@ import { saveFile, loadFile } from '../utils/fileDB.js'
 import { extractFileContent } from '../utils/extractFile.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { getEmailTools, getDesignTool, classifyIntent } from '../utils/functionCalling.js'
+import { getApiHeaders } from '../utils/apiHeaders.js'
 import { buildDesignPrompt, parseDesignBlocks, cleanDesignMarkers, cleanDesignMarkersStreaming, hasOpenDesignBlock, guessDeviceType, extractFirstHtmlBlock, extractRawHtml } from '../utils/designPreview.js'
 import { initEmailScheduler } from '../utils/email.js'
 import VirtualList from '../components/VirtualList.vue'
@@ -103,6 +123,15 @@ const inputBarRef = ref(null)
 const codePanelVisible = ref(false)
 const codePanelTabs = ref([])
 const showModelMenu = ref(false)
+const MODELS = [
+  { id: 'deepseek-v4-flash', label: 'V4 Flash', desc: '快速响应' },
+  { id: 'deepseek-v4-pro', label: 'V4 Pro', desc: '深度思考' },
+]
+
+function selectModel(id) {
+  store.setModel(id)
+  showModelMenu.value = false
+}
 
 // ═══ Per-tab state — isolated via component :key on tab switch ═══
 const pendingFiles = ref([])
@@ -131,13 +160,13 @@ function tabColor(index) {
     return TAB_COLORS[index % TAB_COLORS.length]
 }
 
-function newTab() {
+async function newTab() {
     if (!store.apikey) {
         alert('请先输入 API Key')
         return
     }
     const id = 'conv_' + Date.now()
-    store.createConversation(id)
+    await store.createConversation(id)
     router.push('/chat/' + id)
 }
 
@@ -163,11 +192,30 @@ function closeTab(id) {
     }
 }
 
-onMounted(() => {
-    store.loadApiKey()
-    store.loadConversations()
+onMounted(async () => {
+    // Only init if HomeView hasn't already restored state for this conversation
+    const alreadyLoaded = store.messagesMap[route.params.id] && store.messagesMap[route.params.id].length > 0
+
+    if (!alreadyLoaded) {
+        store.loadApiKey()
+        await store.loadConversations()
+    }
+
     if (route.params.id) {
+        // switchTab is a no-op if currentId already matches
         store.switchTab(route.params.id)
+    }
+
+    // Auto-trigger AI reply for conversations started from homepage
+    if (store._pendingAutoReply && store._pendingAutoReply === store.currentId) {
+        delete store._pendingAutoReply
+        nextTick(() => {
+            const msgs = store.messagesMap[store.currentId] || []
+            const lastMsg = msgs[msgs.length - 1]
+            if (lastMsg && lastMsg.role === 'user') {
+                callStreamAPI()
+            }
+        })
     }
     initEmailScheduler()
 })
@@ -407,9 +455,9 @@ async function send() {
 }
 
 // Show device picker after AI confirms design intent
-function showDesignPicker(userText, summary, files = []) {
+async function showDesignPicker(userText, summary, files = []) {
     const convId = store.currentId
-    store.addUserMessage(userText, files)
+    await store.addUserMessage(userText, files)
 
     // Directly push a device picker AI message (no DB, in-memory only)
     const msgs = store.messagesMap[convId] || []
@@ -515,12 +563,12 @@ async function sendToAgent(task) {
             const { ai } = await import('../api/index.js')
             await ai.chatStream(msgs, 'deepseek-v4-flash',
                 (full) => store.appendStreamText(tempId, full),
-                (full) => { store.updateStreamCleanText(tempId, full); store.finishStreamReply(tempId); store.setLoading(false, convId) },
-                (err) => { store.updateStreamCleanText(tempId, 'Error: ' + err.message); store.finishStreamReply(tempId); store.setLoading(false, convId) }
+                async (full) => { store.updateStreamCleanText(tempId, full); await store.finishStreamReply(tempId); store.setLoading(false, convId) },
+                async (err) => { store.updateStreamCleanText(tempId, 'Error: ' + err.message); await store.finishStreamReply(tempId); store.setLoading(false, convId) }
             )
         } catch (e) {
             store.updateStreamCleanText(tempId, 'Error: ' + e.message)
-            store.finishStreamReply(tempId)
+            await store.finishStreamReply(tempId)
             store.setLoading(false, convId)
         }
         return
@@ -552,11 +600,10 @@ async function sendToAgent(task) {
     try {
         const res = await fetch('/api/agent/run', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+            headers: getApiHeaders({
                 'Authorization': 'Bearer ' + localStorage.getItem('bbot_token'),
                 'x-permission-mode': store.permissionMode || 'default',
-            },
+            }),
             body: JSON.stringify({ task, model: 'deepseek-v4-pro' }),
             signal: abortCtrl.signal
         })
@@ -614,7 +661,7 @@ async function sendToAgent(task) {
     } else if (logText) {
         store.updateStreamCleanText(tempId, logText)
     }
-    store.finishStreamReply(tempId)
+    await store.finishStreamReply(tempId)
 
     // Clean up agent state for this conversation
     delete agentRunningMap[convId]
@@ -627,8 +674,6 @@ async function sendToAgent(task) {
 }
 
 async function _doSend(text) {
-    const isFirstExchange = (store.messagesMap[store.currentId] || []).filter(m => m.role === 'user').length === 0
-
     const files = pendingFiles.value.map(f => ({
         name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '',
     }))
@@ -649,8 +694,9 @@ async function _doSend(text) {
         lastUserMsg._device = deviceInfo
     }
 
-    // Fire title generation immediately (don't wait for stream)
-    if (isFirstExchange) {
+    // Fire title generation if conversation still has default title
+    const conv = store.conversations.find(c => c.id === store.currentId)
+    if (!conv || !conv.title || conv.title === '新对话') {
         generateTitle(text || (files[0]?.name || '文件'), store.currentId)
     }
 
@@ -718,7 +764,7 @@ async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, de
 
     const res = await fetch('/api/ai/chat/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(),
         body: JSON.stringify(body),
         signal: (abortCtrl || {}).signal,
     })
@@ -861,7 +907,7 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             store.updateStreamDesign(tempId, [])
             store.updateStreamRawText(tempId, '')
             store.updateStreamAgentEvents(tempId, [])
-            store.finishStreamReply(tempId)
+            await store.finishStreamReply(tempId)
             store.setLoading(false, convId)
             // Mark last AI message as device picker
             const realId = store._lastFinishedId
@@ -898,13 +944,13 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             }
         }
 
-        store.finishStreamReply(tempId)
+        await store.finishStreamReply(tempId)
     } catch (e) {
         if (e.name === 'AbortError') {
-            store.finishStreamReply(tempId)
+            await store.finishStreamReply(tempId)
         } else {
             store.updateStreamCleanText(tempId, '请求失败: ' + e.message)
-            store.finishStreamReply(tempId)
+            await store.finishStreamReply(tempId)
         }
     } finally {
         store.setLoading(false, convId)
@@ -975,7 +1021,7 @@ async function onPickDevice(pickerMsg, device) {
         }
         const first = await doStream(msgs2, tempId, [], true, dev.w, dev.h, abortCtrl)
         let final = first.text
-        store.finishStreamReply(tempId)
+        await store.finishStreamReply(tempId)
 
         // Extract designs
         const aiMsgs = store.messagesMap[convId] || []
@@ -998,7 +1044,7 @@ async function onPickDevice(pickerMsg, device) {
     } catch (e) {
         if (e.name !== 'AbortError') {
             store.updateStreamCleanText(tempId, '请求失败: ' + e.message)
-            store.finishStreamReply(tempId)
+            await store.finishStreamReply(tempId)
         }
     } finally {
         store.setLoading(false, convId)
@@ -1064,7 +1110,7 @@ async function generateTitle(userMsg, convId) {
     try {
         const res = await fetch('/api/ai/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({
                 model: store.model,
                 messages: [
@@ -1123,6 +1169,32 @@ async function generateTitle(userMsg, convId) {
 }
 .preview-close:hover { background: var(--bg3); color: var(--text); }
 .preview-img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: var(--radius); }
+
+.model-backdrop { position: fixed; inset: 0; z-index: 199; }
+.model-menu {
+  position: fixed; bottom: 72px; right: 24px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  padding: 4px; min-width: 200px; z-index: var(--z-dropdown);
+}
+.model-opt {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 9px 12px; border-radius: var(--radius-sm);
+  border: none; background: transparent;
+  color: var(--text2); font-size: 13px; font-family: inherit;
+  cursor: pointer; transition: background .1s; text-align: left;
+}
+.model-opt:hover { background: var(--bg3); color: var(--text); }
+.model-opt.active { background: var(--accent-muted); color: var(--accent); }
+.model-opt-name { font-weight: 500; white-space: nowrap; }
+.model-opt-desc { font-size: 11px; color: var(--text3); flex: 1; }
+.model-opt.active .model-opt-desc { color: var(--accent); opacity: .7; }
+.model-check { color: var(--accent); flex-shrink: 0; }
+
+.drop-enter-active { animation: dropIn .15s ease both; transform-origin: bottom right; }
+.drop-leave-active { animation: dropOut .1s ease both; transform-origin: bottom right; }
+@keyframes dropIn { from { opacity: 0; transform: scale(.95) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes dropOut { from { opacity: 1; transform: scale(1) translateY(0); } to { opacity: 0; transform: scale(.95) translateY(4px); } }
 
 @media (max-width: 768px) {
   .device-bar { padding: 4px 10px; }

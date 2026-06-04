@@ -79,6 +79,33 @@ db.exec(`
     permission_mode TEXT DEFAULT 'default',
     created_at      TEXT DEFAULT (datetime('now','localtime'))
   );
+
+  CREATE TABLE IF NOT EXISTS conversations (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL,
+    title       TEXT DEFAULT '新对话',
+    model       TEXT DEFAULT 'deepseek-v4-flash',
+    created_at  TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    conv_id     TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    role        TEXT NOT NULL CHECK(role IN ('user','ai')),
+    text        TEXT NOT NULL,
+    parent_id   INTEGER,
+    files       TEXT DEFAULT '[]',
+    designs     TEXT DEFAULT '[]',
+    reasoning   TEXT DEFAULT '',
+    created_at  TEXT DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (conv_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_messages_conv_id ON messages(conv_id);
+  CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 `)
 
 // ─── User queries ───
@@ -272,4 +299,73 @@ const agentRuns = {
   }
 }
 
-module.exports = { db, user, friend, dm, room, agentRuns }
+// ─── AI Chat Conversations & Messages ───
+const conv = {
+  create(id, userId, model) {
+    db.prepare('INSERT INTO conversations (id, user_id, model) VALUES (?, ?, ?)').run(id, userId, model || 'deepseek-v4-flash')
+  },
+  findById(id, userId) {
+    return db.prepare('SELECT * FROM conversations WHERE id = ? AND user_id = ?').get(id, userId)
+  },
+  listForUser(userId) {
+    return db.prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY created_at DESC').all(userId)
+  },
+  updateTitle(id, userId, title) {
+    db.prepare('UPDATE conversations SET title = ? WHERE id = ? AND user_id = ?').run(title, id, userId)
+  },
+  delete(id, userId) {
+    const del = db.prepare('DELETE FROM messages WHERE conv_id = ? AND user_id = ?')
+    const delConv = db.prepare('DELETE FROM conversations WHERE id = ? AND user_id = ?')
+    const tx = db.transaction(() => {
+      del.run(id, userId)
+      delConv.run(id, userId)
+    })
+    tx()
+  },
+  getMessages(convId, userId) {
+    return db.prepare('SELECT * FROM messages WHERE conv_id = ? AND user_id = ? ORDER BY id ASC').all(convId, userId)
+  },
+  addMessage(convId, userId, role, text, parentId, files, designs, reasoning) {
+    const stmt = db.prepare('INSERT INTO messages (conv_id, user_id, role, text, parent_id, files, designs, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    const result = stmt.run(convId, userId, role, text, parentId || null, files || '[]', designs || '[]', reasoning || '')
+    return result.lastInsertRowid
+  },
+  updateMessage(id, userId, text) {
+    db.prepare('UPDATE messages SET text = ? WHERE id = ? AND user_id = ?').run(text, id, userId)
+  },
+  deleteMessage(id, userId) {
+    db.prepare('DELETE FROM messages WHERE id = ? AND user_id = ?').run(id, userId)
+  },
+  deleteMessagesSince(convId, userId, sinceId) {
+    db.prepare('DELETE FROM messages WHERE conv_id = ? AND user_id = ? AND id > ?').run(convId, userId, sinceId)
+  },
+  exportAll(userId) {
+    const conversations = db.prepare('SELECT id, title, model, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC').all(userId)
+    const msgs = db.prepare('SELECT * FROM messages WHERE user_id = ? ORDER BY id ASC').all(userId)
+    // Group messages by conv_id
+    const messages = {}
+    for (const m of msgs) {
+      if (!messages[m.conv_id]) messages[m.conv_id] = []
+      messages[m.conv_id].push(m)
+    }
+    return { conversations, messages }
+  },
+  bulkImport(userId, conversations, messages) {
+    const insConv = db.prepare('INSERT OR REPLACE INTO conversations (id, user_id, title, model, created_at) VALUES (?, ?, ?, ?, ?)')
+    const insMsg = db.prepare('INSERT OR IGNORE INTO messages (id, conv_id, user_id, role, text, parent_id, files, designs, reasoning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    const tx = db.transaction(() => {
+      for (const c of conversations) {
+        insConv.run(c.id, userId, c.title || '新对话', c.model || 'deepseek-v4-flash', c.created_at || null)
+      }
+      for (const [convId, msgs] of Object.entries(messages || {})) {
+        for (const m of msgs) {
+          insMsg.run(m.id, convId, userId, m.role, m.text, m.parent_id || null, m.files || '[]', m.designs || '[]', m.reasoning || '', m.created_at || null)
+        }
+      }
+    })
+    tx()
+    return conversations.length
+  },
+}
+
+module.exports = { db, user, friend, dm, room, agentRuns, conv }

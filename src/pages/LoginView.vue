@@ -9,8 +9,6 @@
       </div>
       <h1>DeepSeek-Super</h1>
       <p class="subtitle">{{ isRegister ? t('registerSub') : t('loginSub') }}</p>
-      <p class="sub-hint">{{ t('loginHint') }}</p>
-
       <div class="form">
         <input
           v-model="name"

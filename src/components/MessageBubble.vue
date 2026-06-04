@@ -413,6 +413,8 @@ async function copyText() {
 .msg.user .bubble {
     background: var(--bg3); border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+    width: fit-content;
+    max-width: 100%;
 }
 .msg.ai .body {
     border-left: 2px solid var(--accent);

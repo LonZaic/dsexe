@@ -127,6 +127,7 @@ import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { useChatStore } from '../store/chatStore.js'
 import { useI18n } from '../composables/useI18n.js'
 import { renderMarkdown } from '../utils/markdown.js'
+import { getApiHeaders } from '../utils/apiHeaders.js'
 
 const { t } = useI18n()
 const store = useChatStore()
@@ -151,7 +152,6 @@ const renderedFinal = computed(() => renderMarkdown(finalOutput.value))
 async function runAgent() {
   const task = taskText.value.trim()
   if (!task || isRunning.value) return
-  if (!store.apikey) { alert('请先设置 API Key'); return }
 
   taskText.value = ''
   isRunning.value = true
@@ -169,12 +169,10 @@ async function runAgent() {
   try {
     const res = await fetch('/api/agent/run', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+      headers: getApiHeaders({
         'Authorization': 'Bearer ' + (localStorage.getItem('bbot_token') || ''),
-        'x-api-key': store.apikey,
         'x-permission-mode': store.permissionMode || 'default',
-      },
+      }),
       body: JSON.stringify({ task, model: 'deepseek-v4-pro' }),
       signal: ctrl.signal,
     })

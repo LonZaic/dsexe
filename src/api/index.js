@@ -140,13 +140,12 @@ export const groups = {
 // AI
 export const ai = {
   async chat(messages, model) {
+    const { getApiHeaders } = await import('../utils/apiHeaders.js')
     const res = await fetch(BASE + '/ai/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+      headers: getApiHeaders({
         'Authorization': 'Bearer ' + getToken(),
-        'x-api-key': getApiKey(),
-      },
+      }),
       body: JSON.stringify({ messages, model: model || 'deepseek-v4-flash' })
     })
     const body = await res.json()
@@ -157,12 +156,12 @@ export const ai = {
   },
   async chatStream(messages, model, onChunk, onDone, onError) {
     try {
+      const { getApiHeaders } = await import('../utils/apiHeaders.js')
       const res = await fetch(BASE + '/ai/chat/stream', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+        headers: getApiHeaders({
           'Authorization': 'Bearer ' + getToken(),
-        },
+        }),
         body: JSON.stringify({ messages, model: model || 'deepseek-v4-flash' })
       })
       if (!res.ok) {
@@ -203,6 +202,64 @@ export const ai = {
     } catch (e) {
       onError && onError(e)
     }
+  }
+}
+
+// Conversations (AI chat history)
+export const conversations = {
+  list() {
+    return request('/conversations')
+  },
+  create(id, model) {
+    return request('/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ id, model })
+    })
+  },
+  get(id) {
+    return request('/conversations/' + id)
+  },
+  updateTitle(id, title) {
+    return request('/conversations/' + id, {
+      method: 'PATCH',
+      body: JSON.stringify({ title })
+    })
+  },
+  delete(id) {
+    return request('/conversations/' + id, { method: 'DELETE' })
+  },
+  messages(id) {
+    return request('/conversations/' + id + '/messages')
+  },
+  addMessage(convId, data) {
+    return request('/conversations/' + convId + '/messages', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  },
+  updateMessage(convId, msgId, text) {
+    return request('/conversations/' + convId + '/messages/' + msgId, {
+      method: 'PATCH',
+      body: JSON.stringify({ text })
+    })
+  },
+  deleteMessage(convId, msgId) {
+    return request('/conversations/' + convId + '/messages/' + msgId, { method: 'DELETE' })
+  },
+  truncate(convId, sinceId) {
+    return request('/conversations/' + convId + '/truncate', {
+      method: 'POST',
+      body: JSON.stringify({ sinceId })
+    })
+  },
+  exportAll() {
+    return request('/conversations/export/all')
+  },
+  importAll(data) {
+    return request('/conversations/import', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
   }
 }
 

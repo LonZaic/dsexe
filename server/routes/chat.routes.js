@@ -32,4 +32,25 @@ router.get('/groups/:id', authRequired, ctrl.getGroupDetail)
 router.get('/groups/:id/messages', authRequired, ctrl.getGroupMessages)
 router.post('/groups/:id/leave', authRequired, ctrl.leaveGroup)
 
+// ═══ AI Chat Conversations & Messages ═══
+// NOTE: export/import must be BEFORE /:id routes to avoid path collision
+
+// Export / Import
+router.get('/conversations/export/all', authRequired, ctrl.exportData)
+router.post('/conversations/import', authRequired, ctrl.importData)
+
+// Conversations
+router.get('/conversations', authRequired, ctrl.listConversations)
+router.post('/conversations', authRequired, ctrl.createConversation)
+router.get('/conversations/:id', authRequired, ctrl.getConversation)
+router.patch('/conversations/:id', authRequired, ctrl.updateConversation)
+router.delete('/conversations/:id', authRequired, ctrl.deleteConversation)
+
+// Messages within a conversation
+router.get('/conversations/:id/messages', authRequired, ctrl.listMessages)
+router.post('/conversations/:id/messages', authRequired, ctrl.addMessage)
+router.patch('/conversations/:id/messages/:msgId', authRequired, ctrl.updateMessage)
+router.delete('/conversations/:id/messages/:msgId', authRequired, ctrl.deleteMessage)
+router.post('/conversations/:id/truncate', authRequired, ctrl.truncateMessages)
+
 module.exports = router

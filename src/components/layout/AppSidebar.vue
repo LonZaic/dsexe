@@ -32,11 +32,16 @@
       <button class="nav-item" @click="openSettings('api')">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 7.5h6M2 11h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="11.5" cy="10" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13.5 12l1 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         {{ t('apiKey') }}
-        <span class="nav-dot" v-if="!apiKeySet" />
+        <span class="api-warn" v-if="needKeyWarning">请填写</span>
+        <span class="api-ok" v-else-if="!needKeyWarning">已配置</span>
       </button>
       <button class="nav-item" @click="openSettings('email')">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1.5" y="3.5" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 5l6 4 6-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         {{ t('email') }}
+      </button>
+      <button class="nav-item" @click="openSettings('data')">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="2" y="1.5" width="11" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 5h11" stroke="currentColor" stroke-width="1.3"/><circle cx="5.5" cy="3.5" r=".7" fill="currentColor"/><circle cx="8" cy="3.5" r=".7" fill="currentColor"/></svg>
+        {{ t('dataTabTitle') }}
       </button>
       <button class="nav-item" :class="{ active: isSocialActive }" @click="$router.push('/social')">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M1 13c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M11 8c1.7 0 3 1.2 3 2.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -44,10 +49,60 @@
       </button>
     </div>
 
-    <div class="recents-header"><span>{{ t('recent') }}</span></div>
+    <!-- Search -->
+    <div class="recents-header">
+      <div class="search-box">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="3.5" stroke="currentColor" stroke-width="1.2"/><path d="M7.5 7.5L10.5 10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        <input v-model="searchQuery" class="search-input" :placeholder="t('searchConvs')" @click.stop />
+        <button v-if="searchQuery" class="search-clear" @click.stop="searchQuery = ''">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+
     <div class="recents-list">
-      <div v-for="conv in store.conversations" :key="conv.id" :class="['recent-item', { active: conv.id === store.currentId }]" @click="openChat(conv.id)">{{ conv.title || t('newChat') }}</div>
-      <div v-if="!store.conversations.length" class="recents-empty">{{ t('noConvs') }}</div>
+      <div
+        v-for="conv in filteredConvs"
+        :key="conv.id"
+        :class="['recent-item', { active: conv.id === store.currentId }]"
+        @click="openChat(conv.id)"
+        @contextmenu.prevent="openCtxMenu($event, conv)"
+      >
+        <span class="recent-title" :title="conv.title">{{ conv.title || t('newChat') }}</span>
+        <div class="recent-actions">
+          <button class="recent-act" :title="t('rename')" @click.stop="startRename(conv)">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 8.5V10h1.5l5.87-5.87-1.5-1.5L1 8.5zM9.71 2.21a.5.5 0 000-.71l-.79-.79a.5.5 0 00-.71 0l-.73.73 1.5 1.5.73-.73z" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="recent-act del" :title="t('deleteConv')" @click.stop="confirmDelete(conv)">
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 3h7M4 3V2a1 1 0 011-1h1a1 1 0 011 1v1M1.5 3h8v.5a.5.5 0 01-.5.5h-.5l-.4 5.5a.5.5 0 01-.5.5H3.4a.5.5 0 01-.5-.5l-.4-5.5H2a.5.5 0 01-.5-.5V3z" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div v-if="!filteredConvs.length && !store.conversations.length" class="recents-empty">{{ t('noConvs') }}</div>
+      <div v-else-if="!filteredConvs.length" class="recents-empty">{{ t('noMatchConvs') }}</div>
+    </div>
+
+    <!-- Delete confirm dialog -->
+    <div v-if="deleting" class="confirm-overlay" @click="cancelDelete" @keydown.esc="cancelDelete">
+      <div class="confirm-box" @click.stop>
+        <p class="confirm-text">{{ t('confirmDeleteQ') }}「{{ deleting.title }}」？</p>
+        <p class="confirm-sub">{{ t('cannotUndo') }}</p>
+        <div class="confirm-actions">
+          <button class="confirm-btn cancel" @click="cancelDelete">{{ t('cancel') }}</button>
+          <button class="confirm-btn danger" @click="doDelete">{{ t('delete') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rename inline input -->
+    <div v-if="renaming" class="rename-overlay" @click="cancelRename">
+      <div class="rename-box" @click.stop>
+        <input v-model="renameText" class="rename-input" @keydown.enter="doRename" @keydown.esc="cancelRename" ref="renameRef" />
+        <div class="rename-actions">
+          <button class="rename-btn ok" @click="doRename">{{ t('ok') }}</button>
+          <button class="rename-btn" @click="cancelRename">{{ t('cancel') }}</button>
+        </div>
+      </div>
     </div>
 
     <div class="sidebar-bottom">
@@ -114,10 +169,18 @@ const store = useChatStore()
 const { t, lang, setLang, langDisplay, LANG_META, isZh } = useI18n()
 const loggedIn = ref(isLoggedIn())
 const apiKeySet = ref(false)
+const keyMode = ref('builtin')
+const needKeyWarning = computed(() => keyMode.value === 'own' && !apiKeySet.value)
 const openSettings = inject('openSettings')
 
 const showLangMenu = ref(false)
 const langSwitcherRef = ref(null)
+const searchQuery = ref('')
+const renaming = ref(false)
+const renameId = ref(null)
+const renameText = ref('')
+const renameRef = ref(null)
+const deleting = ref(null)  // { id, title } or null
 
 const isSocialActive = computed(() => ['/social','/friends','/groups','/dm','/group'].some(p => route.path.startsWith(p)))
 
@@ -125,15 +188,52 @@ const currentLangLabel = computed(() => langDisplay(lang.value))
 
 const userName = computed(() => { try { return JSON.parse(localStorage.getItem('bbot_user')).name } catch { return null } })
 
+const filteredConvs = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return store.conversations
+  return store.conversations.filter(c => (c.title || '').toLowerCase().includes(q))
+})
+
 function goHome() { router.push('/') }
-function newChat() { if (!apiKeySet.value) { openSettings('api'); return }; const id = 'conv_' + Date.now(); store.createConversation(id); router.push('/chat/' + id) }
+async function newChat() { const id = 'conv_' + Date.now(); await store.createConversation(id); router.push('/chat/' + id) }
 function openChat(id) { store.switchTab(id); router.push('/chat/' + id) }
 function doLogout() { logout(); disconnect(); loggedIn.value = false; router.push('/') }
 
-function selectLang(code) {
-  setLang(code)
-  showLangMenu.value = false
+function selectLang(code) { setLang(code); showLangMenu.value = false }
+
+// ─── Rename ───
+function startRename(conv) {
+  renaming.value = true
+  renameId.value = conv.id
+  renameText.value = conv.title || ''
+  setTimeout(() => renameRef.value?.focus(), 50)
 }
+function doRename() {
+  if (renameText.value.trim() && renameId.value) {
+    store.updateConvTitle(renameId.value, renameText.value.trim())
+  }
+  renaming.value = false; renameId.value = null; renameText.value = ''
+}
+function cancelRename() { renaming.value = false; renameId.value = null; renameText.value = '' }
+
+// ─── Delete ───
+function confirmDelete(conv) {
+  deleting.value = { id: conv.id, title: conv.title || '新对话' }
+}
+function cancelDelete() { deleting.value = null }
+function doDelete() {
+  if (!deleting.value) return
+  const id = deleting.value.id
+  store.deleteConv(id)
+  if (store.currentId === id) {
+    if (store.openTabs.length) { router.push('/chat/' + store.openTabs[0]) }
+    else router.push('/')
+  }
+  deleting.value = null
+}
+
+// ─── Context menu ───
+function openCtxMenu(e, conv) { /* reserved for future */ }
 
 // Close lang menu on outside click
 function onOutsideClick(e) {
@@ -144,8 +244,10 @@ function onOutsideClick(e) {
 
 onMounted(() => {
   store.loadApiKey(); store.loadConversations()
-  apiKeySet.value = store.apikey.length > 0; loggedIn.value = isLoggedIn()
-  setInterval(() => { loggedIn.value = isLoggedIn(); apiKeySet.value = store.apikey.length > 0 }, 2000)
+  apiKeySet.value = store.apikey.length > 0
+  keyMode.value = localStorage.getItem('key_mode') || 'builtin'
+  loggedIn.value = isLoggedIn()
+  setInterval(() => { loggedIn.value = isLoggedIn(); apiKeySet.value = store.apikey.length > 0; keyMode.value = localStorage.getItem('key_mode') || 'builtin' }, 2000)
   document.addEventListener('click', onOutsideClick)
 })
 
@@ -165,16 +267,110 @@ onUnmounted(() => {
 .nav-item:hover { background: var(--bg3); color: var(--text); }
 .nav-item.active { background: var(--bg3); color: var(--text); }
 .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: auto; }
+.api-warn { font-size: 10px; color: var(--red); margin-left: auto; font-weight: 400; }
+.api-ok { font-size: 10px; color: var(--green); margin-left: auto; font-weight: 400; }
 .nav-item.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
 .nav-badge { font-size: 9px; font-weight: 500; letter-spacing: .5px; padding: 1px 5px; border-radius: var(--radius-full); background: var(--accent-muted); color: var(--accent); margin-left: auto; }
-.recents-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 6px; font-size: 12px; color: var(--text3); letter-spacing: .04em; }
+.recents-header { padding: 10px 12px 6px; }
+.search-box {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color .15s;
+}
+.search-box:focus-within { border-color: var(--border2); }
+.search-box svg { color: var(--text3); flex-shrink: 0; }
+.search-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text2); font-size: 12px; font-family: inherit; font-weight: 300;
+}
+.search-input::placeholder { color: var(--text3); }
+.search-clear {
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: none; background: var(--bg4); color: var(--text3); cursor: pointer;
+  flex-shrink: 0; padding: 0;
+}
+.search-clear:hover { background: var(--text3); color: var(--bg); }
+
 .recents-list { flex: 1; overflow-y: auto; padding: 0 8px; }
 .recents-list::-webkit-scrollbar { width: 4px; }
 .recents-list::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 4px; }
-.recent-item { padding: 6px 10px; border-radius: 8px; cursor: pointer; color: var(--text3); font-size: 13px; font-weight: 300; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .12s, color .12s; border: none; background: transparent; width: 100%; font-family: inherit; text-align: left; }
+.recent-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px 10px; border-radius: 8px; cursor: pointer;
+  color: var(--text3); font-size: 13px; font-weight: 300;
+  transition: background .12s, color .12s;
+  border: none; background: transparent; width: 100%; font-family: inherit;
+}
 .recent-item:hover { background: var(--bg3); color: var(--text2); }
+.recent-item:hover .recent-actions { opacity: 1; }
 .recent-item.active { background: var(--bg3); color: var(--text); }
+.recent-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-actions { display: flex; gap: 1px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+.recent-act {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px;
+  border: none; background: transparent; color: var(--text3);
+  cursor: pointer; transition: all .1s;
+}
+.recent-act:hover { background: var(--bg4); color: var(--text2); }
+.recent-act.del:hover { background: rgba(248,81,73,0.12); color: var(--red); }
 .recents-empty { padding: 20px 12px; font-size: 12px; color: var(--text3); font-weight: 300; }
+
+/* Confirm dialog */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-box {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 24px;
+  width: 320px; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+}
+.confirm-text { font-size: 15px; color: var(--text); font-weight: 400; margin: 0 0 6px; }
+.confirm-sub { font-size: 12px; color: var(--text3); font-weight: 300; margin: 0 0 18px; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirm-btn {
+  padding: 7px 20px; border-radius: var(--radius-sm);
+  font-size: 13px; font-family: inherit; font-weight: 400;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); cursor: pointer; transition: all .12s;
+}
+.confirm-btn:hover { background: var(--bg4); color: var(--text); }
+.confirm-btn.danger { background: var(--red); color: #fff; border-color: var(--red); }
+.confirm-btn.danger:hover { opacity: .85; }
+
+/* Rename overlay */
+.rename-overlay {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+}
+.rename-box {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius); padding: 16px;
+  width: 280px; box-shadow: 0 8px 32px rgba(0,0,0,.4);
+}
+.rename-input {
+  width: 100%; padding: 8px 10px;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); outline: none;
+  color: var(--text); font-size: 14px; font-family: inherit; font-weight: 300;
+}
+.rename-input:focus { border-color: var(--accent); }
+.rename-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+.rename-btn {
+  padding: 5px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); font-size: 12px; font-family: inherit; cursor: pointer;
+  transition: all .12s;
+}
+.rename-btn:hover { background: var(--bg4); color: var(--text); }
+.rename-btn.ok { background: var(--accent); color: #fff; border-color: var(--accent); }
+.rename-btn.ok:hover { background: var(--accent-hover); }
 .sidebar-bottom { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
 
 /* ═══ Language Switcher ═══ */

@@ -3,7 +3,7 @@
 // ══════════════════════════════════════
 
 const { v4: uuid } = require('uuid')
-const { user, friend, dm, room } = require('../db')
+const { user, friend, dm, room, conv } = require('../db')
 const { sendSuccess, sendError } = require('../middleware/errorHandler')
 
 // ─── Users ───
@@ -141,9 +141,109 @@ function leaveGroup(req, res) {
   sendSuccess(res, { ok: true })
 }
 
+// ═══ AI Chat Conversations & Messages ═══
+
+function listConversations(req, res) {
+  const convs = conv.listForUser(req.user.id)
+  sendSuccess(res, convs)
+}
+
+function getConversation(req, res) {
+  const c = conv.findById(req.params.id, req.user.id)
+  if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
+  const msgs = conv.getMessages(req.params.id, req.user.id)
+  sendSuccess(res, { conversation: c, messages: msgs })
+}
+
+function createConversation(req, res) {
+  const { id, model } = req.body
+  if (!id) return sendError(res, '缺少对话 ID', 'BAD_REQUEST', 400)
+  try {
+    conv.create(id, req.user.id, model || 'deepseek-v4-flash')
+    sendSuccess(res, { id }, 201)
+  } catch (e) {
+    if (e.message && e.message.includes('UNIQUE constraint')) {
+      return sendError(res, '对话已存在', 'CONFLICT', 409)
+    }
+    throw e
+  }
+}
+
+function updateConversation(req, res) {
+  const c = conv.findById(req.params.id, req.user.id)
+  if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
+  const { title } = req.body
+  if (!title) return sendError(res, '缺少标题', 'BAD_REQUEST', 400)
+  conv.updateTitle(req.params.id, req.user.id, title)
+  sendSuccess(res, { ok: true })
+}
+
+function deleteConversation(req, res) {
+  const c = conv.findById(req.params.id, req.user.id)
+  if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
+  conv.delete(req.params.id, req.user.id)
+  sendSuccess(res, { ok: true })
+}
+
+function listMessages(req, res) {
+  const c = conv.findById(req.params.id, req.user.id)
+  if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
+  const msgs = conv.getMessages(req.params.id, req.user.id)
+  sendSuccess(res, msgs)
+}
+
+function addMessage(req, res) {
+  const c = conv.findById(req.params.id, req.user.id)
+  if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
+  const { role, text, parent_id, files, designs, reasoning } = req.body
+  if (!role || !text) return sendError(res, '缺少 role 或 text', 'BAD_REQUEST', 400)
+  const msgId = conv.addMessage(req.params.id, req.user.id, role, text, parent_id || null, files || '[]', designs || '[]', reasoning || '')
+  sendSuccess(res, { id: msgId }, 201)
+}
+
+function updateMessage(req, res) {
+  const { text } = req.body
+  if (!text) return sendError(res, '缺少文本', 'BAD_REQUEST', 400)
+  conv.updateMessage(req.params.msgId, req.user.id, text)
+  sendSuccess(res, { ok: true })
+}
+
+function deleteMessage(req, res) {
+  conv.deleteMessage(req.params.msgId, req.user.id)
+  sendSuccess(res, { ok: true })
+}
+
+function truncateMessages(req, res) {
+  const c = conv.findById(req.params.id, req.user.id)
+  if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
+  const { sinceId } = req.body
+  if (sinceId == null) return sendError(res, '缺少 sinceId', 'BAD_REQUEST', 400)
+  conv.deleteMessagesSince(req.params.id, req.user.id, sinceId)
+  sendSuccess(res, { ok: true })
+}
+
+function exportData(req, res) {
+  const data = conv.exportAll(req.user.id)
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Disposition', 'attachment; filename="deepseek-chat-data.json"')
+  res.json(data)
+}
+
+function importData(req, res) {
+  const { conversations, messages } = req.body
+  if (!conversations || !Array.isArray(conversations)) {
+    return sendError(res, '无效的导入数据：缺少 conversations 数组', 'BAD_REQUEST', 400)
+  }
+  const count = conv.bulkImport(req.user.id, conversations, messages || {})
+  sendSuccess(res, { imported: count })
+}
+
 module.exports = {
   searchUsers, onlineUsers,
   getFriends, addFriend, acceptFriend, rejectFriend, removeFriend,
   getDmMessages, sendDmMessage,
   getUserGroups, getAllGroups, createGroup, joinGroup, getGroupDetail, getGroupMessages, leaveGroup,
+  listConversations, getConversation, createConversation, updateConversation, deleteConversation,
+  listMessages, addMessage, updateMessage, deleteMessage, truncateMessages,
+  exportData, importData,
 }

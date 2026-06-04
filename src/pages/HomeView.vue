@@ -11,8 +11,8 @@
           @click="switchTab(tab.id)"
         >
           <span class="tab-title">{{ tab.title || t('newChatTab') }}</span>
-          <button class="tab-close" @click.stop="closeTab(tab.id)">
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <button class="tab-close" @click.prevent.stop="closeTab(tab.id)">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" pointer-events="none">
               <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
             </svg>
           </button>
@@ -186,66 +186,74 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
 }
 
-function quickStart(mode) {
+async function quickStart(mode) {
   const text = inputText.value.trim()
   if (!text && mode === 'chat') return
-  if (!store.apikey) { openSettings('api'); return }
   const id = 'conv_' + Date.now()
-  store.createConversation(id)
-  if (text) store.addUserMessage(text, [])
+  await store.createConversation(id)
+  inputText.value = ''
+  if (text) await store.addUserMessage(text, [])
+  // Flag this conv so ChatView knows to auto-trigger AI response
+  store._pendingAutoReply = id
   router.push('/chat/' + id)
 }
 
-function newChat() {
-  if (!store.apikey) { openSettings('api'); return }
+async function newChat() {
   const id = 'conv_' + Date.now()
-  store.createConversation(id)
+  await store.createConversation(id)
   router.push('/chat/' + id)
 }
 
 function switchTab(id) { store.switchTab(id); router.push('/chat/' + id) }
 function closeTab(id) {
   store.closeTab(id)
-  if (store.currentId === id) {
-    if (store.openTabs.length) switchTab(store.openTabs[0])
-    else store.currentId = null
+  // Store already switched currentId — sync the route
+  if (store.currentId) {
+    router.push('/chat/' + store.currentId)
+  } else {
+    router.push('/')
   }
 }
 
-function openFeature(type) {
-  if (!store.apikey) { openSettings('api'); return }
+async function openFeature(type) {
   const id = 'conv_' + Date.now()
-  store.createConversation(id)
+  await store.createConversation(id)
   const prompts = {
     agent: 'List the files in this project and tell me what you can do',
     design: 'Create a modern landing page with HTML/CSS',
     code: 'Write a Python script that fetches and parses JSON from an API',
   }
   const text = prompts[type] || ''
-  if (text) store.addUserMessage(text, [])
+  if (text) await store.addUserMessage(text, [])
+  store._pendingAutoReply = id
   router.push('/chat/' + id)
 }
 
 // Sync URL param → store tab
-function syncRoute() {
+async function syncRoute() {
   const id = route.params.id
-  if (id && id !== store.currentId) {
-    store.loadMessages(id)
+  if (!id) return
+  // Load messages if not in cache (after refresh, session restores currentId but messagesMap is empty)
+  if (!store.messagesMap[id] || !store.messagesMap[id].length) {
+    await store.loadMessages(id)
+  } else if (id !== store.currentId) {
+    store.switchTab(id)
   }
 }
 
 watch(() => route.params.id, (id) => {
   if (id) {
-    if (!store.messagesMap[id]) store.loadMessages(id)
+    if (!store.messagesMap[id] || !store.messagesMap[id].length) store.loadMessages(id)
     else store.switchTab(id)
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   store.loadApiKey()
-  store.loadConversations()
+  await store.loadConversations()
+  await store._restoreSession()
   loggedIn.value = isLoggedIn()
-  syncRoute()
+  await syncRoute()
 })
 </script>
 

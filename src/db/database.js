@@ -40,24 +40,40 @@ async function idbSet(key, value) {
 export async function initDB() {
     const SQL = await initSqlJs({ locateFile: file => '/sql-wasm.wasm' })
 
-    // Try IndexedDB first, then fall back to localStorage
+    // Try IndexedDB first, then localStorage backup, then legacy key
     let saved = await idbGet('db')
-    if (!saved) {
-      const ls = localStorage.getItem('sqlite_db')
-      if (ls) {
-        try { saved = JSON.parse(ls); localStorage.removeItem('sqlite_db') } catch {}
-      }
+    if (!saved || !saved.length) {
+        // Try new localStorage backup (base64)
+        const backup = localStorage.getItem('sqlite_db_backup')
+        if (backup) {
+            try {
+                const binary = atob(backup)
+                const bytes = new Uint8Array(binary.length)
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+                saved = Array.from(bytes)
+                console.log('[DB] Restored from localStorage backup')
+            } catch { /* fall through */ }
+        }
+    }
+    if (!saved || !saved.length) {
+        // Try legacy key
+        const ls = localStorage.getItem('sqlite_db')
+        if (ls) {
+            try { saved = JSON.parse(ls); localStorage.removeItem('sqlite_db') } catch {}
+        }
     }
 
     if (saved && saved.length > 0) {
         try {
             db = new SQL.Database(new Uint8Array(saved))
             db.exec('SELECT 1 FROM conversations LIMIT 1')
+            console.log('[DB] Loaded', saved.length, 'bytes')
         } catch {
             console.warn('[DB] Corrupted, starting fresh')
             db = new SQL.Database()
         }
     } else {
+        console.log('[DB] Fresh database')
         db = new SQL.Database()
     }
 
@@ -103,14 +119,71 @@ export async function initDB() {
     saveDB()
 }
 
+let _saveTimer = null
+let _saveResolve = null
+
 function saveDB() {
+    if (!db) return
+    // Debounce: collapse rapid writes into one save every 300ms
+    if (_saveTimer) clearTimeout(_saveTimer)
+    _saveTimer = setTimeout(async () => {
+        _saveTimer = null
+        try {
+            await _doSave()
+            if (_saveResolve) { _saveResolve(); _saveResolve = null }
+        } catch(e) {
+            if (_saveResolve) { _saveResolve(); _saveResolve = null }
+        }
+    }, 300)
+}
+
+async function _doSave() {
     if (!db) return
     try {
         const data = Array.from(db.export())
-        idbSet('db', data).catch(() => {})
+        // Dual persistence: IndexedDB + localStorage backup
+        await idbSet('db', data).catch(() => {})
+        try {
+            // Save as base64 to localStorage as fallback
+            const bytes = new Uint8Array(data)
+            let binary = ''
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i])
+            }
+            localStorage.setItem('sqlite_db_backup', btoa(binary))
+        } catch (lsErr) {
+            // localStorage full or not available — IndexedDB only
+        }
     } catch(e) {
         console.error('[DB] export failed:', e.message)
     }
+}
+
+// Force an immediate synchronous save — called on beforeunload
+function flushSaveSync() {
+    if (_saveTimer) {
+        clearTimeout(_saveTimer)
+        _saveTimer = null
+    }
+    if (!db) return
+    try {
+        const data = Array.from(db.export())
+        const bytes = new Uint8Array(data)
+        let binary = ''
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i])
+        }
+        localStorage.setItem('sqlite_db_backup', btoa(binary))
+    } catch(e) {
+        console.error('[DB] flushSaveSync failed:', e.message)
+    }
+}
+
+// Register beforeunload to force-save DB and session before page close/refresh
+if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+        flushSaveSync()
+    })
 }
 
 export function createConversation(id, model = 'deepseek-chat'){

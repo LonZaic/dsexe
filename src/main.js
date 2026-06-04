@@ -24,6 +24,7 @@ app.directive('debounce', vDebounce)
 
 // Initialize settings (theme, API key) after pinia is ready
 import { useSettingsStore } from './stores/settingsStore.js'
+import { useChatStore } from './store/chatStore.js'
 const settingsStore = useSettingsStore()
 settingsStore.init()
 
@@ -37,7 +38,19 @@ app.config.errorHandler = (err, vm, info) => {
 }
 
 // Mount app
-await initDB().catch(err => {
-  console.error('DB init failed:', err)
-})
+// Only init client-side sql.js when NOT logged in (logged-in users use server API)
+const token = localStorage.getItem('bbot_token')
+if (!token) {
+  await initDB().catch(err => {
+    console.error('DB init failed:', err)
+  })
+}
 app.mount('#app')
+
+// Ensure session state is persisted on page close/refresh
+window.addEventListener('beforeunload', () => {
+  try {
+    const store = useChatStore()
+    store._saveSession()
+  } catch {}
+})

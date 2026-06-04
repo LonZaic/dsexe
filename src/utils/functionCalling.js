@@ -123,9 +123,10 @@ async function classifyIntent(userText, apikey, contextMsgs = []) {
         tool_choice: { type: 'function', function: { name: 'classify_intent' } },
     }
 
+    const { getApiHeaders } = await import('./apiHeaders.js')
     const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getApiHeaders(),
         body: JSON.stringify(body),
     })
 

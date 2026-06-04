@@ -3,21 +3,22 @@
 // ══════════════════════════════════════
 
 import client, { BASE_URL } from './client.js'
+import { getApiHeaders } from '../utils/apiHeaders.js'
+
+function authHeaders(extra = {}) {
+  return getApiHeaders({ ...extra })
+}
 
 /**
  * Run a personal agent task via SSE stream.
  * Returns an object with { abort, promise } to control the stream.
  */
 export function runAgent(task, model, permissionMode = 'default', onEvent) {
-  const apiKey = localStorage.getItem('ds_api_key')
   const controller = new AbortController()
 
   const promise = fetch(`${BASE_URL}/api/agent/run`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-permission-mode': permissionMode,
-    },
+    headers: authHeaders({ 'x-permission-mode': permissionMode }),
     body: JSON.stringify({ task, model }),
     signal: controller.signal,
   }).then(async response => {
@@ -55,15 +56,11 @@ export function runAgent(task, model, permissionMode = 'default', onEvent) {
  * Run a group agent task.
  */
 export function runGroupAgent(task, roomId, model, permissionMode = 'default', onEvent) {
-  const apiKey = localStorage.getItem('ds_api_key')
   const controller = new AbortController()
 
   const promise = fetch(`${BASE_URL}/api/agent/group-run`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-permission-mode': permissionMode,
-    },
+    headers: authHeaders({ 'x-permission-mode': permissionMode }),
     body: JSON.stringify({ task, roomId, model }),
     signal: controller.signal,
   }).then(async response => {
@@ -98,31 +95,14 @@ export function runGroupAgent(task, roomId, model, permissionMode = 'default', o
 }
 
 /**
- * Judge whether a task needs the agent.
- */
-export function judgeTask(task, context) {
-  return client.post('/api/agent/judge', { task, context })
-}
-
-/**
- * AI chat (non-streaming).
- */
-export function aiChat(messages, model) {
-  return client.post('/api/ai/chat', { messages, model })
-}
-
-/**
  * AI chat (streaming SSE).
  */
 export function aiChatStream(messages, model, onChunk, onDone) {
-  const apiKey = localStorage.getItem('ds_api_key')
   const controller = new AbortController()
 
   const promise = fetch(`${BASE_URL}/api/ai/chat/stream`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: authHeaders(),
     body: JSON.stringify({ messages, model }),
     signal: controller.signal,
   }).then(async response => {
@@ -162,9 +142,8 @@ export function aiChatStream(messages, model, onChunk, onDone) {
 export const agentApi = {
   runAgent,
   runGroupAgent,
-  judgeTask,
-  aiChat,
   aiChatStream,
+  judgeTask: (task, context) => client.post('/api/agent/judge', { task, context }),
   getMemory: () => client.get('/api/agent/memory'),
   saveMemory: (name, description, type, content) =>
     client.post('/api/agent/memory', { name, description, type, content }),

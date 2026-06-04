@@ -25,6 +25,7 @@ dist-ssr
 server/bbot.db*
 server/bbot.db-wal
 server/bbot.db-shm
+server/db/bbot.db*
 .env
 .vite
 .vite-temp
