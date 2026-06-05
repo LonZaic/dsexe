@@ -171,6 +171,20 @@ router.post('/code/resume', (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+// ─── Get DeepSeek account balance ───
+router.get('/code/balance', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'] || process.env.DEEPSEEK_API_KEY || ''
+    const resp = await fetch('https://api.deepseek.com/user/balance', {
+      headers: { 'Accept': 'application/json', 'Authorization': `Bearer ${apiKey}` }
+    })
+    const data = await resp.json()
+    res.json(data)
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // ─── Get Task.md ───
 router.post('/code/task', (req, res) => {
   try {

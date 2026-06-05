@@ -88,15 +88,6 @@
           </Transition>
         </div>
 
-        <!-- Web Search toggle -->
-        <button
-          :class="['toolbar-btn', 'toggle-btn', { active: webSearch }]"
-          :title="t('webSearch')"
-          @click="$emit('toggle-web-search')"
-        >
-          <AppIcon name="globe" :size="16" />
-          <span class="toggle-label">{{ t('webSearch') }}</span>
-        </button>
       </div>
 
       <div class="toolbar-right">
@@ -149,7 +140,6 @@ const props = defineProps({
   disabled: { type: Boolean, default: false },
   isRunning: { type: Boolean, default: false },
   files: { type: Array, default: () => [] },
-  webSearch: { type: Boolean, default: false },
   thinkingDepth: { type: String, default: 'medium' },
   model: { type: String, default: 'deepseek-v4-flash' },
 })
@@ -158,7 +148,6 @@ const emit = defineEmits([
   'update:modelValue',
   'send',
   'stop',
-  'toggle-web-search',
   'toggle-model-menu',
   'update:thinkingDepth',
   'add-file',

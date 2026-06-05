@@ -272,8 +272,8 @@ const L = {
   agentErrorMsg:   ['Agent 出错', 'Agent 出錯', 'Agent 發生錯誤', 'Agent error'],
   requestFailed:   ['请求失败', '請求失敗', '請求失敗', 'Request failed'],
   somethingWrong:  ['出了点问题', '出咗啲問題', '出了點問題', 'Something went wrong'],
-  systemPrompt:    ['你在一个私聊对话中。根据上下文回答，简洁有用。', '你喺一個私聊對話入面。根據上下文回答，簡潔有用。', '你在一個私聊對話中。根據上下文回答，簡潔有用。', 'You are in a private chat. Answer concisely and helpfully based on context.'],
-  systemPromptGroup: ['你在开发者群聊中。简洁专业地回答问题，用中文。', '你喺開發者群組入面。簡潔專業咁回答問題，用中文。', '你在開發者群聊中。簡潔專業地回答問題，用中文。', 'You are in a developer group chat. Answer concisely and professionally.'],
+  systemPrompt:    ['INTJ 型 AI。私聊模式。直接、简洁、说实话。不确定就去搜。不讨好、不废话。', 'INTJ 型 AI。私聊模式。直接、簡潔、說實話。不確定就去搜。不討好、不廢話。', 'INTJ 型 AI。私聊模式。直接、簡潔、說實話。不確定就去搜。不討好、不廢話。', 'INTJ AI. Private chat. Direct, concise, truthful. Verify before speaking. No flattery.'],
+  systemPromptGroup: ['INTJ 型 AI。群聊模式。直接、简洁、说实话。不确定就去搜。', 'INTJ 型 AI。群組模式。直接、簡潔、說實話。不確定就去搜。', 'INTJ 型 AI。群組模式。直接、簡潔、說實話。不確定就去搜。', 'INTJ AI. Group chat. Direct, concise, truthful. Verify before speaking.'],
   viewPanel:       ['（查看面板）', '（檢視面板）', '（檢視面板）', ' (view panel)'],
 
   // ── Code Mode ──

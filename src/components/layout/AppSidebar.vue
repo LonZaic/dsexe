@@ -351,8 +351,9 @@ function doDelete() {
     agStore.deleteConversation(id)
     router.push('/agent')
   } else {
+    const wasCurrent = store.currentId === id
     store.deleteConv(id)
-    if (store.currentId === id) {
+    if (wasCurrent) {
       if (store.openTabs.length) { router.push('/chat/' + store.openTabs[0]) }
       else router.push('/')
     }

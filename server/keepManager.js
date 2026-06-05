@@ -66,28 +66,28 @@ async function generateHandoff(projectPath, task, messages, completedTasks, pend
     return `[${r}] ${c}`
   }).join('\n')
 
-  const prompt = `你是一个 AI 接力助手。上一个 AI 实例上下文已满，你需要为新 AI 实例生成接力提示词。
+  const prompt = `你是 AI 接力助手。为新 AI 实例生成接力提示词。直接、简洁、不废话。
 
 ## 用户任务
 ${task}
 
-## 已完成步骤
+## 已完成
 ${completedTasks.map(t => `- [x] ${t.text}`).join('\n') || '（无）'}
 
-## 未完成步骤
+## 未完成
 ${pendingTasks.map(t => `- [ ] ${t.text}`).join('\n') || '（无）'}
 
 ## 最近对话
 ${conversation.slice(0, 2000)}
 
 ## 要求
-为新 AI 实例写一段 200-500 字的接力提示词，包含：
-1. 任务的当前进度
-2. 已完成的关键改动（文件路径、改动内容）
-3. 接下来要做什么
-4. 需要注意的陷阱或约定
+写 200-500 字接力提示词，包含：
+1. 当前进度
+2. 已完成的改动（文件路径、内容）
+3. 接下来做什么
+4. 注意事项和陷阱
 
-输出纯文本，不要 markdown 格式。`
+输出纯文本。`
 
   const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',

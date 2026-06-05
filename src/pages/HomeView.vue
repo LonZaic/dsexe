@@ -34,16 +34,6 @@
       </div>
 
       <div class="feature-grid">
-        <div class="feature-card" @click="openFeature('agent')">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <rect x="2" y="3" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/>
-            <circle cx="7" cy="8.5" r="1.5" fill="currentColor" opacity="0.5"/>
-            <circle cx="11" cy="8.5" r="1.5" fill="currentColor" opacity="0.5"/>
-            <path d="M6 12h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-          </svg>
-          <div class="feature-card-title">{{ t('agentMode') }}</div>
-          <div class="feature-card-desc">{{ t('agentModeDesc') }}</div>
-        </div>
         <div class="feature-card" @click="openFeature('design')">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <rect x="1" y="1" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.3"/>
@@ -101,10 +91,6 @@
           />
           <div class="input-toolbar">
             <div class="toolbar-left">
-              <button class="tool-btn" @click="quickStart('agent')">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                {{ t('agent') }}
-              </button>
               <button class="tool-btn" :class="{ active: thinking !== 'medium' }" @click="cycleThinking">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3v3.5L9 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
                 {{ thinkingLabel }}
@@ -115,7 +101,7 @@
                 <span class="model-dot" />
                 {{ modelLabel }}
               </button>
-              <button class="send-btn" @click="quickStart('chat')" :disabled="!inputText.trim()">
+              <button class="send-btn" @click="quickStart()" :disabled="!inputText.trim()">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M7 1v12M3 5l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
@@ -138,6 +124,7 @@ import { useChatStore } from '../store/chatStore.js'
 import { isLoggedIn } from '../api/index.js'
 import { useI18n } from '../composables/useI18n.js'
 import ChatView from './ChatView.vue'
+import TokenBar from '../components/common/TokenBar.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -177,7 +164,7 @@ function cycleModel() {
 }
 
 function onKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); quickStart('chat') }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); quickStart() }
 }
 function autoResize() {
   const el = textareaRef.value
@@ -186,16 +173,23 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
 }
 
-async function quickStart(mode) {
+async function quickStart() {
   const text = inputText.value.trim()
-  if (!text && mode === 'chat') return
-  const id = 'conv_' + Date.now()
-  await store.createConversation(id)
-  inputText.value = ''
-  if (text) await store.addUserMessage(text, [])
-  // Flag this conv so ChatView knows to auto-trigger AI response
-  store._pendingAutoReply = id
-  router.push('/chat/' + id)
+  if (!text) return
+  try {
+    inputText.value = ''
+    const id = 'conv_' + Date.now()
+    // 必须在 createConversation 前设置——createConversation 会设 currentId，
+    // 导致 ChatView 立即挂载，onMounted 需要读到这个标记
+    store._pendingAutoReply = id
+    await store.createConversation(id)
+    await store.addUserMessage(text, [])
+    router.push('/chat/' + id)
+  } catch (e) {
+    delete store._pendingAutoReply
+    alert('发送失败: ' + (e.message || '未知错误'))
+    inputText.value = text
+  }
 }
 
 async function newChat() {
@@ -219,7 +213,6 @@ async function openFeature(type) {
   const id = 'conv_' + Date.now()
   await store.createConversation(id)
   const prompts = {
-    agent: 'List the files in this project and tell me what you can do',
     design: 'Create a modern landing page with HTML/CSS',
     code: 'Write a Python script that fetches and parses JSON from an API',
   }

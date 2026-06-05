@@ -235,6 +235,7 @@
         </div>
       </div>
 
+      <TokenBar :promptTokens="tokPrompt" :completionTokens="tokComp" :totalTokens="tokTotal" :model="codeModel" :balance="balance" @refresh-balance="fetchBalance" />
       <div class="cv-chat-bar">
         <div class="cv-chat-row">
           <textarea ref="inputRef" v-model="task" :placeholder="t('codePlaceholder')" :rows="1"
@@ -385,6 +386,7 @@ import { BASE_URL } from '../api/client.js'
 import { getApiHeaders } from '../utils/apiHeaders.js'
 import { useI18n } from '../composables/useI18n.js'
 import { getAgentPhrase } from '../utils/agentPhrases.js'
+import TokenBar from '../components/common/TokenBar.vue'
 import hljs from 'highlight.js'
 window.hljs = hljs
 
@@ -405,6 +407,10 @@ const newProjectName = ref('')
 const newProjectParent = ref('E:\\')
 const loading = ref(false)
 const paused = ref(false)
+const tokPrompt = ref(0)
+const tokComp = ref(0)
+const tokTotal = ref(0)
+const balance = ref(null)
 const codeModel = ref(localStorage.getItem('code_model') || 'deepseek-v4-pro')
 const showModelMenu = ref(false)
 let _isCreatingProject = false
@@ -718,10 +724,20 @@ function tryHighlight(code, lang) {
   return null
 }
 
+async function fetchBalance() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/code/balance`, { headers: getApiHeaders({}) })
+    const data = await res.json()
+    if (data.balance_infos?.length) {
+      balance.value = parseFloat(data.balance_infos[0].total_balance) || 0
+    }
+  } catch {}
+}
+
 onMounted(() => {
   store.restoreSession()
   if (store.projectPath) loadProject(store.projectPath)
-  // Scroll to bottom after restoring messages
+  fetchBalance()
   nextTick(() => { scrollDown() })
 })
 
@@ -918,7 +934,8 @@ async function send() {
   paused.value = false
 
   if (!store.currentId) store.createConversation(txt.slice(0, 30))
-  store.tasks = []  // clear old plan, fresh start for new message
+  store.tasks = []
+  tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0  // reset token counter
   store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: txt })
   store.addUserMessage(txt)
 
@@ -1059,6 +1076,11 @@ async function send() {
       if (e.type === 'subagent_done') {
         aiMsg.thinking = (aiMsg.thinking || '') + '\n[子Agent完成]'
       }
+      if (e.type === 'token_usage') {
+        tokPrompt.value = e.promptTokens || 0
+        tokComp.value = e.completionTokens || 0
+        tokTotal.value = e.totalTokens || 0
+      }
       if (e.type === 'handoff_ready') {
         aiMsg._handoffReady = true
         aiMsg._handoffTokens = e.tokens
@@ -1077,7 +1099,10 @@ async function send() {
       await nextTick(); scrollDown()
     }, _abortCtrl.signal, existingPlan)
   } catch (e) {
-    if (e.name !== 'AbortError') {
+    if (e.name === 'AbortError') {
+      aiMsg._error = true
+      aiMsg.html = renderMarkdown('<span style="color:var(--red)">[!] **任务中断**</span>')
+    } else {
       aiMsg._error = true
       aiMsg.html = renderMarkdown('**出错**: ' + (e.message || '未知'))
     }

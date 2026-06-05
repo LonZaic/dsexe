@@ -10,6 +10,8 @@ const aiRoutes = require('./ai.routes')
 const agentRoutes = require('./agent.routes')
 const memoryRoutes = require('./memory.routes')
 const codeRoutes = require('./code.routes')
+const searchRoutes = require('./search.routes')
+const weatherRoutes = require('./weather.routes')
 
 const router = Router()
 
@@ -19,5 +21,7 @@ router.use('/api/ai', aiRoutes)
 router.use('/api/agent', agentRoutes)
 router.use('/api/agent', memoryRoutes)
 router.use('/api', codeRoutes)
+router.use('/api', searchRoutes)
+router.use('/api', weatherRoutes)
 
 module.exports = router

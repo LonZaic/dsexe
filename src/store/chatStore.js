@@ -6,6 +6,7 @@ import {
     updateMessage, deleteMessage, deleteMessagesSince
 } from '../db/database.js'
 import { conversations as convApi } from '../api/index.js'
+import { sanitizeReasoning } from '../utils/reasoningGuard.js'
 
 const _abortMap = {}  // per-conversation abort controllers
 
@@ -251,6 +252,10 @@ export const useChatStore = defineStore('chat', {
             delete this.messagesMap[id]
             delete this.branchStateMap[id]
             this.openTabs = this.openTabs.filter(t => t !== id)
+            // Clear currentId if we just deleted the active conversation
+            if (this.currentId === id) {
+                this.currentId = null
+            }
             // reload list
             if (this._useServerApi()) {
                 this.conversations = await convApi.list()
@@ -388,7 +393,7 @@ export const useChatStore = defineStore('chat', {
 
         appendStreamReasoning(tempId, text) {
             const r = this._findStreamMsg(tempId)
-            if (r) r.msg.reasoning = text
+            if (r) r.msg.reasoning = sanitizeReasoning(text)
         },
 
         appendStreamDesignProgress(tempId, pct) {

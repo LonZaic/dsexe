@@ -59,28 +59,16 @@ function isCommandSafe(cmd) {
 }
 
 // ─── DuckDuckGo Web Search ───
-function duckDuckGoSearch(query) {
-  return new Promise((resolve) => {
-    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
-    https.get(url, { timeout: 10000 }, (res) => {
-      let data = ''
-      res.on('data', c => data += c)
-      res.on('end', () => {
-        try {
-          const j = JSON.parse(data)
-          const results = []
-          if (j.AbstractText) results.push(` ${j.AbstractText}`)
-          if (j.AbstractURL) results.push(` ${j.AbstractURL}`)
-          if (j.RelatedTopics) {
-            for (const t of j.RelatedTopics.slice(0, 5)) {
-              if (t.Text) results.push(`• ${t.Text}${t.FirstURL ? ' — ' + t.FirstURL : ''}`)
-            }
-          }
-          resolve(results.length ? results.join('\n') : `No results found for: ${query}`)
-        } catch { resolve(`Search completed but could not parse results for: ${query}`) }
-      })
-    }).on('error', () => resolve(`Search failed (network error) for: ${query}`))
-  })
+const { webSearch, formatSearchResults } = require('../search')
+
+async function duckDuckGoSearch(query) {
+  try {
+    const results = await webSearch(query, 5)
+    if (!results.length) return `No results found for: ${query}`
+    return formatSearchResults(results)
+  } catch (e) {
+    return `Search failed (network error) for: ${query}`
+  }
 }
 
 // ═══════════════════════════════════════

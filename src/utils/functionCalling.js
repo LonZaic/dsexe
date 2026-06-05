@@ -106,7 +106,7 @@ function getClassifyTool() {
 async function classifyIntent(userText, apikey, contextMsgs = []) {
     // Build messages: system + recent context (max 4) + current user msg
     const messages = [
-        { role: 'system', content: '分析用户意图。设计/创建网页UI→design。短词如"做""继续""开始"若上文是设计对话→design。普通对话→chat。' },
+        { role: 'system', content: '严格判断用户意图。只有用户明确要求"设计网页/UI界面/做页面/画组件/创建前端"才返回design。天气、搜索、问答、编程、聊天等一律返回chat。不确定就返回chat。' },
     ]
     const recent = contextMsgs.slice(-4)
     for (const m of recent) {
