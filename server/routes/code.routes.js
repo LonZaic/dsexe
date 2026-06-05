@@ -43,6 +43,22 @@ router.post('/code/read-file', (req, res) => {
   }
 })
 
+// ─── Write file content (for diff revert) ───
+router.post('/code/write-file', (req, res) => {
+  try {
+    const { filePath, content } = req.body
+    if (!filePath) return res.status(400).json({ error: 'filePath required' })
+    const fs = require('fs')
+    const path = require('path')
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(filePath, content, 'utf-8')
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // ─── Create new project folder ───
 router.post('/code/new-project', (req, res) => {
   try {

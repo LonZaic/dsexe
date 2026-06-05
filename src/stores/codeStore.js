@@ -75,19 +75,45 @@ export const useCodeStore = defineStore('code', () => {
     const d = pendingDiffs.value[diffIdx]
     if (!d) return
     pendingDiffs.value.splice(diffIdx, 1)
-    // Re-read actual file content from disk instead of using truncated diff data
+    // Re-read actual file content from disk
     try {
       const { content } = await readFileContent(d.filePath)
       const f = openFiles.value.find(x => x.path === d.filePath)
       if (f) { f.content = content; f.originalContent = content }
     } catch {
-      // Fallback: use diff content if file read fails
       const f = openFiles.value.find(x => x.path === d.filePath)
       if (f) f.content = d.newCode
     }
   }
 
-  function rejectDiff(diffIdx) { pendingDiffs.value.splice(diffIdx, 1) }
+  async function rejectDiff(diffIdx) {
+    const d = pendingDiffs.value[diffIdx]
+    if (!d) return
+    pendingDiffs.value.splice(diffIdx, 1)
+    // Revert the file: replace newCode with oldCode
+    try {
+      const { content } = await readFileContent(d.filePath)
+      const reverted = content.replace(d.newCode, d.oldCode)
+      // Write reverted content back to disk via API
+      const { BASE_URL } = await import('../api/client.js')
+      const { getApiHeaders } = await import('../utils/apiHeaders.js')
+      await fetch(`${BASE_URL}/api/code/write-file`, {
+        method: 'POST',
+        headers: getApiHeaders({}),
+        body: JSON.stringify({ filePath: d.filePath, content: reverted })
+      })
+      // Update local file view
+      const f = openFiles.value.find(x => x.path === d.filePath)
+      if (f) { f.content = reverted; f.originalContent = reverted }
+    } catch {
+      // Fallback: just refresh from disk
+      try {
+        const { content } = await readFileContent(d.filePath)
+        const f = openFiles.value.find(x => x.path === d.filePath)
+        if (f) { f.content = content; f.originalContent = content }
+      } catch {}
+    }
+  }
 
   // ─── Conversations (persisted to SQLite) ───
   function loadConversations() {

@@ -36,21 +36,19 @@
         <div class="cv-code" v-if="activeFile">
           <div class="cv-code-inner" ref="codeRef">
             <div v-for="(line, i) in displayLines" :key="i" class="cv-line"
-              :class="{ 'cv-line-del': line._deleted || activeFile._deleted, 'cv-line-add': line._added }">
+              :class="{ 'cv-line-del': line._deleted, 'cv-line-add': line._added }">
               <span class="cv-line-num">{{ line._num }}</span>
-              <span class="cv-line-code" v-html="line._html || line.text"></span>
+              <span class="cv-line-code" v-html="line._html || escHtml(line.text || '')"></span>
+              <!-- Per-diff accept/reject inline -->
+              <div v-if="line._diffActions" class="cv-diff-inline-actions">
+                <button class="cv-diff-btn accept" @click="acceptDiffIdx(line._diffIdx)" :title="t('codeAcceptAll')">
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5.5L4 7.5 9 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button class="cv-diff-btn reject" @click="rejectDiffIdx(line._diffIdx)" :title="t('codeRejectAll')">
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M3 3l5 5M8 3l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+              </div>
             </div>
-          </div>
-          <!-- Diff actions -->
-          <div v-if="store.pendingDiffs.length" class="cv-diff-actions">
-            <button class="cv-diff-btn accept" @click="acceptAll">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5L10 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              {{ t('codeAcceptAll') }}
-            </button>
-            <button class="cv-diff-btn reject" @click="rejectAll">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              {{ t('codeRejectAll') }}
-            </button>
           </div>
         </div>
         <div v-else class="cv-code-empty">
@@ -168,7 +166,7 @@
                     </svg>
                     <svg v-else width="13" height="13" viewBox="0 0 13 13" fill="none" class="cv-step-ok">
                       <circle cx="6.5" cy="6.5" r="5.5" stroke="var(--green)" stroke-width=".8" opacity=".5"/>
-                      <path d="M3.5 6.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M4 6.5l1.8 1.8 3.2-3.5" stroke="var(--green)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     <span class="cv-step-phrase" :class="{ sweep: s._live }">{{ s._phrase }}</span>
                     <span v-if="s._file" class="cv-step-file">{{ s._file }}</span>
@@ -195,22 +193,25 @@
 
               <div v-if="m._running" class="cv-scan"></div>
 
-              <!-- Task plan — only show when running OR has incomplete tasks -->
-              <div v-if="m._todos && m._todos.length && (m._running || m._todos.some(t => t.status !== 'completed'))" class="cv-todos">
-                <div class="cv-todos-hdr">
+              <!-- Task plan — collapsible, auto-collapse when all done -->
+              <div v-if="m._todos && m._todos.length" class="cv-todos">
+                <div class="cv-todos-hdr" @click="toggleTodosOpen(m)" style="cursor:pointer">
                   <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5l2 2 5-5" stroke="var(--green)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   <span>任务计划 ({{ m._todos.filter(t => t.status === 'completed').length }}/{{ m._todos.length }})</span>
+                  <svg :class="['cv-think-chev', { open: m._todosOpen !== false }]" width="10" height="10" viewBox="0 0 10 10" fill="none" style="margin-left:auto">
+                    <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
                 </div>
+                <div v-if="m._todosOpen !== false">
                 <div v-for="t in m._todos" :key="t.id" class="cv-todo-item" :class="{ done: t.status === 'completed', active: t.status === 'in_progress' }">
                   <svg v-if="t.status === 'completed'" width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="var(--green)" stroke-width=".8"/><path d="M3.5 5.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   <svg v-else-if="t.status === 'in_progress'" width="11" height="11" viewBox="0 0 11 11" fill="none" class="cv-todo-spin"><circle cx="5.5" cy="5.5" r="4" stroke="var(--accent)" stroke-width=".8" opacity=".3"/><path d="M9.5 5.5a4 4 0 00-3.2-3.9" stroke="var(--accent)" stroke-width=".9" stroke-linecap="round"/></svg>
                   <svg v-else width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="var(--text3)" stroke-width=".8"/></svg>
                   <span class="cv-todo-text">{{ t.text }}</span>
                 </div>
+                </div> <!-- end v-if todosOpen -->
               </div>
 
-              <div v-if="!m._running && m.html" class="cv-final markdown-body" v-html="m.html"></div>
-              <div v-if="m._error && m.html" class="cv-final cv-final-err markdown-body" v-html="m.html"></div>
             </div>
           </div>
         </template>
@@ -498,6 +499,7 @@ const codeMessages = computed(() => {
       _error: !!m._error,
       _expanded: m._expanded !== false,
       _thinkOpen: m._thinkOpen !== false,
+      _todosOpen: m._todosOpen !== false,  // collapsed by default when all done
     }
   })
 })
@@ -599,7 +601,7 @@ const activeFile = computed(() =>
   store.openFiles.find(f => f.path === store.activeFilePath)
 )
 
-// ─── Syntax-highlighted display lines ───
+// ─── Syntax-highlighted display lines with correct diff coloring ───
 const displayLines = computed(() => {
   const f = activeFile.value
   if (!f) return []
@@ -607,36 +609,56 @@ const displayLines = computed(() => {
   // If file is deleted, show all lines as deleted
   if (f._deleted) {
     return content.split('\n').map((text, i) => ({
-      text, _num: i + 1, _deleted: true, _added: false,
-      _html: escHtml(text)
+      text, _num: i + 1, _deleted: true, _added: false, _html: escHtml(text)
     }))
   }
+
+  const filePath = f.path
+  const fileDiffs = store.pendingDiffs.filter(d => d.filePath === filePath)
   const lines = content.split('\n')
-  let result = lines.map((text, i) => ({
-    text, _num: i + 1, _deleted: false, _added: false,
-  }))
-  // Apply diffs
-  for (const diff of store.pendingDiffs) {
-    if (diff.filePath !== f.path) continue
-    const oldLen = diff.oldCode.split('\n').length
-    const newLines = diff.newCode.split('\n')
-    result = result.map((l, i) => {
-      if (i + 1 >= diff.lineStart && i + 1 < diff.lineStart + oldLen) {
-        return { ...l, _deleted: true }
+
+  // Build a map: line index → diff info
+  // For each diff, mark old range as deleted, new range as added
+  const diffMarkers = new Map() // lineIndex → { deleted, added, diffIdx }
+
+  for (let di = 0; di < fileDiffs.length; di++) {
+    const diff = fileDiffs[di]
+    const oldLines = (diff.oldCode || '').split('\n')
+    const newLines = (diff.newCode || '').split('\n')
+    const start = Math.max(0, (diff.lineStart || 1) - 1)
+
+    // Mark old lines as deleted where they match the file content
+    for (let j = 0; j < oldLines.length; j++) {
+      const idx = start + j
+      if (idx < lines.length && oldLines[j] === lines[idx]) {
+        diffMarkers.set(idx, { deleted: true, added: false, diffIdx: di })
       }
-      return l
-    })
-    if (diff.newCode) {
-      const insertIdx = result.findIndex(l => l._deleted)
-      if (insertIdx >= 0) {
-        const added = newLines.map((text, j) => ({
-          text, _num: diff.lineStart + j, _added: true, _deleted: false
-        }))
-        result.splice(insertIdx, 0, ...added)
+    }
+    // New lines are already in content (AI wrote them) — mark as added
+    for (let j = 0; j < newLines.length; j++) {
+      const idx = start + j
+      if (idx < lines.length) {
+        // Only mark as added if not already deleted (new code replaces old)
+        if (j < oldLines.length && oldLines[j] === newLines[j]) continue // unchanged line
+        diffMarkers.set(idx, { deleted: false, added: true, diffIdx: di })
       }
     }
   }
-  // Apply syntax highlighting
+
+  let result = lines.map((text, i) => {
+    const marker = diffMarkers.get(i)
+    return {
+      text,
+      _num: i + 1,
+      _deleted: marker ? marker.deleted : false,
+      _added: marker ? marker.added : false,
+      _diffIdx: marker ? marker.diffIdx : undefined,
+      _diffActions: marker ? (i === findLastDiffLine(diffMarkers, marker.diffIdx, i)) : false,
+      _html: '',
+    }
+  })
+
+  // Syntax highlighting
   try {
     const lang = extToLang(f.name || '')
     const raw = result.map(l => l.text).join('\n')
@@ -648,11 +670,21 @@ const displayLines = computed(() => {
       })
     }
   } catch {}
+
   return result
 })
 
+// Find the last line of a given diff to show actions only once
+function findLastDiffLine(markers, diffIdx, currentIdx) {
+  let last = currentIdx
+  for (const [idx, m] of markers) {
+    if (m.diffIdx === diffIdx && idx > last) last = idx
+  }
+  return last === currentIdx // only true at the last line of the diff
+}
+
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 }
 
 function extToLang(name) {
@@ -674,6 +706,13 @@ function tryHighlight(code, lang) {
 onMounted(() => {
   store.restoreSession()
   if (store.projectPath) loadProject(store.projectPath)
+  // Scroll to bottom after restoring messages
+  nextTick(() => { scrollDown() })
+})
+
+// Scroll to bottom when switching conversations
+watch(() => store.currentId, () => {
+  nextTick(() => { scrollDown() })
 })
 
 watch(() => store.activeFilePath, async (fp) => {
@@ -758,8 +797,40 @@ async function onFileSelect(item) {
   } catch (e) { alert('读取失败: ' + e.message) }
 }
 
-function acceptAll() { while (store.pendingDiffs.length) store.acceptDiff(0) }
-function rejectAll() { while (store.pendingDiffs.length) store.rejectDiff(0) }
+async function acceptDiffIdx(di) {
+  if (di == null || di >= store.pendingDiffs.length) return
+  await store.acceptDiff(di)
+  refreshFileTree()
+}
+
+async function rejectDiffIdx(di) {
+  if (di == null || di >= store.pendingDiffs.length) return
+  await store.rejectDiff(di)
+  refreshFileTree()
+}
+
+// Debounced file tree refresh
+let _treeRefreshTimer = null
+function refreshFileTree() {
+  clearTimeout(_treeRefreshTimer)
+  _treeRefreshTimer = setTimeout(async () => {
+    if (!store.projectPath) return
+    try {
+      const { tree } = await scanFileTree(store.projectPath)
+      store.setFileTree(tree || [])
+    } catch {}
+  }, 500)
+}
+function toggleTodosOpen(msg) {
+  // Toggle on the original reactive message so Vue tracks it
+  const id = msg._id
+  const msgs = store.messages
+  const orig = msgs.find(m => m._id === id)
+  if (orig) {
+    orig._todosOpen = orig._todosOpen === false ? true : false
+  }
+}
+
 function onThinkScroll(e) {
   const el = e.target
   // If user scrolled away from bottom (>30px), mark as user-scrolled
@@ -905,6 +976,7 @@ async function send() {
           const { content } = await readFileContent(e.filePath, store.projectPath)
           store.updateFileContent(e.filePath, content)
         } catch {}
+        refreshFileTree()  // update file tree in real-time
       }
       if (e.type === 'plan_done' && e.tasks) {
         store.setTasks(e.tasks)
@@ -938,8 +1010,11 @@ async function send() {
 
       if (e.type === 'done') {
         aiMsg._done = true
+        aiMsg._todosOpen = false  // auto-collapse task plan
+        aiMsg._thinkOpen = false  // auto-collapse last thinking
         // Clear all streaming state
         aiMsg._streaming = ''
+        aiMsg._reportStream = ''
         if (e.text) {
           aiMsg.text = e.text
           aiMsg.html = renderMarkdown(e.text)
@@ -1024,12 +1099,13 @@ async function send() {
 .cv-line-del .cv-line-code { text-decoration: line-through; color: var(--red); opacity: .7; }
 .cv-line-add { background: rgba(63,185,80,.08); }
 .cv-line-add .cv-line-code { color: var(--green); }
-.cv-diff-actions { position: sticky; bottom: 0; display: flex; gap: 8px; justify-content: center; padding: 10px; background: var(--bg2); border-top: 1px solid var(--border); }
-.cv-diff-btn { display: flex; align-items: center; gap: 5px; padding: 6px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 12px; font-family: inherit; cursor: pointer; transition: all .12s; }
-.cv-diff-btn.accept { background: rgba(63,185,80,.15); color: var(--green); border-color: rgba(63,185,80,.3); }
-.cv-diff-btn.accept:hover { background: rgba(63,185,80,.25); }
-.cv-diff-btn.reject { background: rgba(248,81,73,.1); color: var(--red); border-color: rgba(248,81,73,.25); }
-.cv-diff-btn.reject:hover { background: rgba(248,81,73,.2); }
+/* Per-diff inline actions */
+.cv-diff-inline-actions { display: flex; gap: 2px; margin-left: auto; flex-shrink: 0; }
+.cv-diff-inline-actions .cv-diff-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 3px; border: 1px solid var(--border); background: var(--bg2); cursor: pointer; transition: all .12s; padding: 0; }
+.cv-diff-inline-actions .cv-diff-btn.accept { color: var(--green); border-color: rgba(63,185,80,.3); }
+.cv-diff-inline-actions .cv-diff-btn.accept:hover { background: rgba(63,185,80,.15); }
+.cv-diff-inline-actions .cv-diff-btn.reject { color: var(--red); border-color: rgba(248,81,73,.25); }
+.cv-diff-inline-actions .cv-diff-btn.reject:hover { background: rgba(248,81,73,.15); }
 
 /* ─── Chat area ─── */
 .cv-chat { width: 360px; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; overflow: hidden; }
@@ -1124,7 +1200,7 @@ async function send() {
 .cv-step:hover { background: var(--bg3); }
 .cv-step-row { display: flex; align-items: center; gap: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; font-weight: 300; }
 .cv-step-spin { animation: cvSpin 1.2s linear infinite; flex-shrink: 0; }
-.cv-step-ok { flex-shrink: 0; }
+.cv-step-ok { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .cv-step-phrase { color: var(--text); font-size: 12px; font-weight: 400; flex-shrink: 0; white-space: nowrap; }
 .cv-step-phrase.sweep { background: linear-gradient(90deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%); background-size: 200% 100%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: cvSweep 2.2s ease-in-out infinite; }
 @keyframes cvSweep { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
