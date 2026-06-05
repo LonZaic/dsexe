@@ -127,6 +127,15 @@
 
             <!-- Expanded body: think → act → report groups -->
             <div v-if="m._expanded" class="cv-card-body">
+              <!-- Live streaming output (real-time, shows what AI is saying right now) -->
+              <div v-if="m._streaming && m._running" class="cv-live-output">
+                <div class="cv-live-hdr">
+                  <svg class="cv-think-dot" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".7"/></svg>
+                  <span class="cv-live-label">思考中</span>
+                </div>
+                <div class="cv-live-body markdown-body" v-html="renderMd(m._streaming)"></div>
+              </div>
+
               <TransitionGroup name="group-fade">
                 <div v-for="(g, gi) in m._groups" :key="'g' + gi" class="cv-group"
                   :class="{ 'cv-group-plan': g._isPlan, 'cv-group-err': g._isError }">
@@ -140,7 +149,7 @@
                         <path d="M3 2l2 2 2-2" stroke="var(--text3)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </div>
-                    <div v-if="g._thinkOpen !== false" class="cv-think-bubble-body">{{ g.thinking }}</div>
+                    <div v-if="g._thinkOpen !== false" class="cv-think-bubble-body markdown-body" v-html="renderMd(g.thinking)"></div>
                   </div>
 
                   <!-- Plan / error banners (no tool rows) -->
@@ -158,8 +167,8 @@
                         <path d="M3.5 6.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                       <span class="cv-step-phrase" :class="{ sweep: t._live }">{{ t._phrase }}</span>
+                      <span v-if="t._file" class="cv-step-file">{{ t._file }}</span>
                       <span class="cv-step-tool">{{ t._tool }}</span>
-                      <span v-if="t._hint" class="cv-step-hint-inline">{{ t._hint }}</span>
                       <svg v-if="t._detail" class="cv-step-chev" :class="{ open: t._open }" width="9" height="9" viewBox="0 0 9 9" fill="none">
                         <path d="M2.5 3L4.5 5l2-2" stroke="var(--text3)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
@@ -171,6 +180,16 @@
                   <div v-if="g.report" class="cv-report markdown-body" v-html="renderMd(g.report)"></div>
                 </div>
               </TransitionGroup>
+
+              <!-- Streaming final report (real-time output as AI writes summary) -->
+              <div v-if="m._reportStream && m._running" class="cv-live-output cv-live-report">
+                <div class="cv-live-hdr">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--green)" stroke-width="1"/><path d="M4 6l1.5 1.5L9 5" stroke="var(--green)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="cv-live-label">最终汇报</span>
+                </div>
+                <div class="cv-live-body markdown-body" v-html="renderMd(m._reportStream)"></div>
+              </div>
+
               <div v-if="m._running" class="cv-scan"></div>
 
               <!-- ═══ Task plan at bottom ═══ -->
@@ -341,7 +360,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useCodeStore } from '../stores/codeStore.js'
-import { renderMarkdown } from '../utils/markdown.js'
+import { renderMarkdown, reinitMermaid } from '../utils/markdown.js'
 import { scanFileTree, readFileContent, newProject, runCodeAgent } from '../api/code.api.js'
 import { BASE_URL } from '../api/client.js'
 import { getApiHeaders } from '../utils/apiHeaders.js'
@@ -441,17 +460,37 @@ const codeMessages = computed(() => {
         _expanded: true,
         _thinkOpen: false,
         _timer: '',
+        _reportStream: '',
         thinking: m.thinking || '',
       }
     }
     const events = m._events || []
     const groups = buildStepGroups(events)
     const lastGroup = groups[groups.length - 1]
-    const lastPhrase = lastGroup ? (lastGroup.tools[lastGroup.tools.length - 1]?._phrase || lastGroup.thinking?.slice(0, 30)) : null
+
+    // Dynamic summary based on current state
+    let summary
+    if (m._error) {
+      summary = '出错了'
+    } else if (m._done) {
+      summary = lastGroup?.report?.slice(0, 50) || '任务完成'
+    } else if (m._reportStream) {
+      summary = '写汇报中...'
+    } else if (m._streaming) {
+      summary = '思考中...'
+    } else if (lastGroup?._isPlan && !lastGroup?.tools?.length) {
+      summary = lastGroup.thinking?.slice(0, 40) || '分析中...'
+    } else {
+      const lastTool = lastGroup?.tools?.[lastGroup.tools.length - 1]
+      summary = lastTool ? (lastTool._live ? lastTool._phrase : '处理结果中...') : '分析任务中'
+    }
+
     return {
       ...m,
       _groups: groups,
-      _summary: m._error ? '出错了' : (m._done ? (lastPhrase || '任务完成') : (lastGroup?.thinking?.slice(0, 40) || '分析任务中')),
+      _streaming: m._streaming || '',
+      _reportStream: m._reportStream || '',
+      _summary: summary,
       _running: m._done === false && !m._error,
       _done: m._done !== false,
       _error: !!m._error,
@@ -497,9 +536,12 @@ function buildStepGroups(events) {
       const a = e.args || {}
       const detail = a.path || a.pattern || a.query || a.command || a.dir || ''
       const toolName = (e.tool || '')
+      // Extract short filename from path for display
+      const fileName = a.path ? a.path.split('\\').pop().split('/').pop() : ''
       cur.tools.push({
         _k: 't' + cur.tools.length,
         _tool: toolName.replace(/_/g, ' '),
+        _file: fileName,
         _detail: detail || (Object.keys(a).length ? JSON.stringify(a).slice(0, 200) : ''),
         _phrase: getAgentPhrase(toolName, 'active', toolName),
         _hint: hintForCode(toolName, a),
@@ -518,10 +560,19 @@ function buildStepGroups(events) {
         }
       }
     }
+    // Start / Planning banners
+    if (e.type === 'start') {
+      const msg = e.isHandoff ? '接力继续执行...' : '收到消息，开始分析...'
+      groups.push({ thinking: msg, tools: [], report: '', _isPlan: true })
+    }
+    if (e.type === 'planning') {
+      groups.push({ thinking: e.text || '正在规划任务...', tools: [], report: '', _isPlan: true })
+    }
     // Plan done / plan reused
     if (e.type === 'plan_done') {
       flush()
-      groups.push({ thinking: '规划完成，开始执行...', tools: [], report: '', _isPlan: true })
+      const label = e.quickMode ? '分析模式（直接执行）' : '规划完成，开始执行...'
+      groups.push({ thinking: label, tools: [], report: '', _isPlan: true })
     }
     if (e.type === 'plan_reused') {
       flush()
@@ -717,7 +768,7 @@ async function onFileSelect(item) {
 
 function acceptAll() { while (store.pendingDiffs.length) store.acceptDiff(0) }
 function rejectAll() { while (store.pendingDiffs.length) store.rejectDiff(0) }
-function scrollDown() { nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight }) }
+function scrollDown() { nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight; reinitMermaid() }) }
 
 const showSwitch = ref(false)
 function newCodeConv() { store.createConversation('Code 对话') }
@@ -764,7 +815,8 @@ async function send() {
   const dbId = store.addAiMessage('', '', '', '[]', '[]', false, false, '0s')
   const aiMsg = reactive({
     _id: 'a_' + Date.now(), role: 'ai', text: '', html: '', thinking: '',
-    _events: [], _done: false, _error: false, _expanded: true, _thinkOpen: true, _timer: '0s'
+    _events: [], _done: false, _error: false, _expanded: true, _thinkOpen: true, _timer: '0s',
+    _streaming: ''  // live streaming thinking text
   })
   store.pushMessage(aiMsg)
   scrollDown()
@@ -796,9 +848,45 @@ async function send() {
       aiMsg._events.push(e)
       _saveDirty = true
 
+      if (e.type === 'start') {
+        // Agent started — show initial state immediately
+        aiMsg._streaming = '正在分析...'
+        aiMsg._thinkOpen = true
+      }
+      if (e.type === 'planning' && e.text) {
+        // Show planning progress in the card
+        aiMsg._streaming = (aiMsg._streaming || '') + '\n' + e.text
+        aiMsg._thinkOpen = true
+      }
+      if (e.type === 'streaming' && e.text) {
+        // Real-time streaming thinking — show live in the card
+        aiMsg._streaming = e.text
+        aiMsg._thinkOpen = true
+      }
+      if (e.type === 'step_thinking_done') {
+        // Thinking phase complete — auto-collapse, move streaming content to thinking
+        aiMsg._thinkOpen = false
+        // Clear live stream so it doesn't duplicate with report groups
+        if (aiMsg._streaming) {
+          aiMsg.thinking = (aiMsg.thinking || '') + aiMsg._streaming
+          aiMsg._streaming = ''
+        }
+        // Also collapse thinking in all groups so previous groups auto-close
+        if (aiMsg._groups) {
+          aiMsg._groups.forEach(g => {
+            if (g._thinkOpen !== false) g._thinkOpen = false
+          })
+        }
+      }
       if (e.type === 'thinking' && e.text) {
         aiMsg.thinking = (aiMsg.thinking || '') + e.text
         aiMsg._thinkOpen = true
+      }
+      if (e.type === 'report_stream' && e.text) {
+        // Final report streaming — show in real-time, clear thinking stream
+        aiMsg._reportStream = e.text
+        aiMsg._streaming = ''
+        aiMsg._thinkOpen = false
       }
       if (e.type === 'code_diff') {
         store.addDiff({
@@ -842,9 +930,13 @@ async function send() {
 
       if (e.type === 'done') {
         aiMsg._done = true
+        // Clear all streaming state
+        aiMsg._streaming = ''
         if (e.text) {
           aiMsg.text = e.text
           aiMsg.html = renderMarkdown(e.text)
+          // If we had a streaming report, use it as final and clear stream
+          if (!aiMsg._reportStream) aiMsg._reportStream = e.text
         }
         aiMsg._thinkOpen = false
         // Persist todos
@@ -980,6 +1072,21 @@ async function send() {
 
 /* Thinking bubble — collapsible */
 .cv-think-bubble { margin: 0 0 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(79,125,255,.03); overflow: hidden; }
+
+/* Live streaming output */
+.cv-live-output { margin: 4px 0; border: 1px solid rgba(79,125,255,.3); border-radius: var(--radius); background: rgba(79,125,255,.04); overflow: hidden; animation: cvPulseBorder 2s ease-in-out infinite; }
+@keyframes cvPulseBorder { 0%,100%{border-color:rgba(79,125,255,.15)} 50%{border-color:rgba(79,125,255,.4)} }
+.cv-live-hdr { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.cv-live-label { font-size: 11px; font-weight: 500; color: var(--accent); }
+.cv-live-body { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); max-height: 400px; overflow-y: auto; }
+.cv-live-body :deep(p) { margin: 4px 0; }
+.cv-live-body :deep(pre) { margin: 6px 0; padding: 8px 10px; background: var(--bg3); border-radius: 4px; font-size: 11px; overflow-x: auto; }
+.cv-live-body :deep(code) { font-family: var(--font-mono); font-size: 11px; }
+.cv-live-body :deep(.mermaid-wrap) { margin: 6px 0; }
+.cv-live-body :deep(svg) { max-width: 100%; height: auto; }
+.cv-live-report { border-color: rgba(63,185,80,.3) !important; background: rgba(63,185,80,.03) !important; animation: cvPulseBorderGreen 2s ease-in-out infinite; }
+@keyframes cvPulseBorderGreen { 0%,100%{border-color:rgba(63,185,80,.12)} 50%{border-color:rgba(63,185,80,.35)} }
+.cv-live-report .cv-live-label { color: var(--green); }
 .cv-think-bubble-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer; user-select: none; }
 .cv-think-bubble-hdr:hover { background: rgba(79,125,255,.06); }
 .cv-think-dot { flex-shrink: 0; animation: cvPulse 1.2s ease-in-out infinite; }
@@ -987,7 +1094,11 @@ async function send() {
 .cv-think-bubble-label { font-size: 11px; font-weight: 500; color: var(--accent); }
 .cv-think-bubble-chev { flex-shrink: 0; opacity: .4; transition: transform .15s; margin-left: auto; }
 .cv-think-bubble-chev.open { transform: rotate(180deg); opacity: .7; }
-.cv-think-bubble-body { padding: 4px 10px 8px; font-size: 12px; line-height: 1.55; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; }
+.cv-think-bubble-body { padding: 4px 10px 8px; font-size: 12px; line-height: 1.55; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+.cv-think-bubble-body.markdown-body { white-space: normal; }
+.cv-think-bubble-body :deep(pre) { margin: 4px 0; padding: 6px 8px; background: var(--bg3); border-radius: 4px; font-size: 10px; overflow-x: auto; }
+.cv-think-bubble-body :deep(code) { font-family: var(--font-mono); font-size: 10px; }
+.cv-think-bubble-body :deep(p) { margin: 2px 0; }
 
 /* Report — markdown rendered */
 .cv-report { padding: 6px 10px 6px 12px; font-size: 13px; line-height: 1.6; color: var(--text); }
@@ -998,6 +1109,8 @@ async function send() {
 /* Mermaid diagrams */
 .mermaid-wrap { margin: 8px 0; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
 .mermaid-wrap :deep(svg) { max-width: 100%; height: auto; }
+.svg-chart-wrap { background: #fff; }
+.svg-chart-wrap :deep(svg) { max-width: 100%; height: auto; display: block; }
 
 /* ─── Step rows (new: inline hint, richer) ─── */
 .cv-step { margin-bottom: 1px; border-radius: 5px; transition: background .15s; }
@@ -1010,6 +1123,7 @@ async function send() {
 @keyframes cvSweep { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
 .cv-step-tool { color: var(--text3); font-size: 10px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; opacity: .6; }
 .cv-step-hint-inline { color: var(--text3); font-size: 10px; font-weight: 300; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; max-width: 120px; }
+.cv-step-file { color: var(--accent); font-size: 11px; font-family: var(--font-mono); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; flex-shrink: 1; }
 .cv-step-chev { flex-shrink: 0; opacity: .35; transition: transform .15s; }
 .cv-step-chev.open { transform: rotate(180deg); opacity: .65; }
 .cv-step-detail { margin: 2px 10px 4px 27px; padding: 6px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; }

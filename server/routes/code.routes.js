@@ -73,6 +73,8 @@ router.post('/code/run', async (req, res) => {
   const send = (data) => {
     if (res.writableEnded) return
     res.write(`data: ${JSON.stringify(data)}\n\n`)
+    // Force flush — critical for real-time streaming
+    if (typeof res.flush === 'function') res.flush()
   }
   const abortController = new AbortController()
   res.on('close', () => abortController.abort())

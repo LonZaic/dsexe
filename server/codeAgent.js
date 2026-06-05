@@ -18,12 +18,14 @@ const { recordEvents, loadSession, buildRecoveryPrompt } = require('./sessionRec
 // subAgent imported lazily inside executeCodeTask to avoid circular dep
 
 const AGENT_TIMEOUT = 3600000
-const MAX_ROUNDS = 200
-const MAX_ROUNDS_PER_TASK = 10
+const MAX_ROUNDS = 300
+const MAX_ROUNDS_PER_TASK = 40  // generous for long analysis/coding sessions
+const MAX_ROUNDS_ANALYSIS = 30 // analysis mode: reading files + thinking
 const WORKSPACE = process.env.AGENT_WORKSPACE || os.homedir()
-const CONTEXT_LIMIT = 60000
-const COMPACT_THRESHOLD = 48000
-const CONTINUE_MAX = 10
+const CONTEXT_LIMIT = 120000    // DeepSeek API supports 128K, leave 8K for response
+const COMPACT_THRESHOLD = 90000 // compact at 90K to stay responsive
+const CONTINUE_MAX = 8   // auto-continue on truncation up to 8 times
+const EMPTY_RETRY_MAX = 2 // retry on empty responses
 
 // ─── Pause/Resume support ───
 let _paused = false
@@ -225,24 +227,18 @@ ${task}
 }
 
 // ─── Quick question detection ───
-function isQuestionTask(task) {
+// Default: quick/analysis mode. Only full planning for explicit code creation requests.
+function isAnalysisTask(task) {
   const t = (task || '').toLowerCase()
-  // Question patterns (user just wants to understand, not change code)
-  const questionPatterns = [
-    /^(这是什么|这是啥|这是什么项目|这个项目是|介绍|说明|解释|讲讲|说说|看看|看一下|了解|怎么|如何|what|how|explain|describe|tell me|show me|list|summarize)/,
-    /(是什么|干嘛的|做什么的|有什么用|怎么用|怎么样|如何|什么意思)/,
-    /^(read|check|find|search|grep|look|see|inspect)/,
+  // Code CREATION patterns — these need full planning
+  const createPatterns = [
+    /(创建|新建|生成|写一个|编写|开发|构建一个|做一个|搭一个|实现一个|create|make|build|develop|implement|scaffold)/,
+    /(添加一个|增加一个|加一个|add a|add the)/,
+    /(重构|refactor|rewrite|重写)/,
+    /(修复|fix|debug|修一下|改一下这个bug)/,
   ]
-  // Code action patterns (user wants to create/modify code)
-  const actionPatterns = [
-    /(创建|新建|生成|写|编写|添加|增加|修改|改|删除|删掉|修复|fix|优化|重构|实现|create|make|build|write|add|edit|modify|delete|remove|refactor|implement|change|update)/,
-  ]
-
-  const isQuestion = questionPatterns.some(r => r.test(t))
-  const isAction = actionPatterns.some(r => r.test(t))
-
-  // If it looks like a question AND NOT an action request → quick mode
-  return isQuestion && !isAction
+  const needsFullPlan = createPatterns.some(r => r.test(t))
+  return !needsFullPlan  // default to analysis mode unless explicitly creating
 }
 async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4-pro', onProgress, signal, existingTasks = null }) {
   projectPath = path.isAbsolute(projectPath) ? projectPath : path.resolve(WORKSPACE, projectPath)
@@ -256,18 +252,19 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
 
   onProgress({ type: 'start', task, projectPath, isHandoff })
 
-  // ─── Phase 1: Plan (skip for simple questions) ───
-  const quickMode = !existingTasks && isQuestionTask(task)
+  // ─── Phase 1: Plan (skip for analysis/quick tasks) ───
+  const analysisMode = !existingTasks && isAnalysisTask(task)
   let allTasks = []
   if (existingTasks && existingTasks.length > 0) {
     allTasks = existingTasks.map(t => ({ id: t.id, text: t.text, done: !!t.done }))
     const pendingCount = allTasks.filter(t => !t.done).length
     onProgress({ type: 'plan_reused', tasks: allTasks.map(t => ({ id: t.id, text: t.text, done: !!t.done })), pendingCount })
-  } else if (quickMode) {
-    // Quick question: just read and answer, no planning needed
+  } else if (analysisMode) {
+    // Quick/analysis mode: just read and answer, no planning needed
     allTasks = [{ id: '1', text: task, done: false }]
     onProgress({ type: 'plan_done', tasks: [{ id: '1', text: task, done: false }], quickMode: true })
   } else {
+    onProgress({ type: 'thinking', text: '正在分析任务并制定计划...\n' })
     onProgress({ type: 'planning', text: '正在规划任务...' })
     try {
       allTasks = await planTask(projectPath, task, apiKey, model, signal)
@@ -303,9 +300,27 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
   // ─── Phase 2: Execute ───
   const skillsPrompt = getSkillsPrompt(projectPath, null)
   let systemPrompt, userPrompt
-  if (quickMode) {
-    systemPrompt = `你是项目分析助手。用户想了解项目"${projectPath}"。先读关键文件(README/package.json/主要代码)，再用自然语言简要回答用户的问题。如果用户要画架构图/流程图，可以写 SVG 文件。不要创建或修改其他文件。一定要回复，不能空响应。`
-    userPrompt = `## 用户问题\n${task}\n\n先浏览项目文件了解情况，然后直接回答。`
+  if (analysisMode) {
+    systemPrompt = `你是项目分析和可视化助手，工作在项目"${projectPath}"。
+
+## 你的能力
+- 你可以使用工具浏览项目文件（list_files, read_file, glob, grep）来了解项目
+- 你可以创建 SVG 图表文件（write_file 写入 .svg）来可视化数据
+- 你可以输出 mermaid 代码块来画架构图、流程图、时序图等
+
+## 规则
+1. 收到用户请求后，先立即开始思考和分析（边想边输出）
+2. 先读关键文件（README、package.json、主要源码）了解项目
+3. 用户问什么就回答什么，不要过度扩展
+4. 用户要画图时：
+   - 架构图/流程图/时序图 → 输出 mermaid 代码块
+   - 数据折线图/柱状图/饼图 → 生成纯 SVG 写入 .svg 文件
+5. 禁止 emoji，只用 SVG 图标
+6. 只读文件和分析，不要修改现有代码文件
+7. 一定要回复，不能空响应
+8. 思考过程要清晰，让用户看到你在做什么`
+
+    userPrompt = `## 用户请求\n${task}\n\n先思考和浏览项目文件了解情况，然后直接回答用户。如果需要画图，用 mermaid 代码块或生成 SVG 文件。`
   } else {
     systemPrompt = buildCodeSystemPrompt(projectPath, followContent, allTasks) + skillsPrompt
     userPrompt = `## 任务计划\n${allTasks.map(t => `- [ ] ${t.id}. ${t.text}`).join('\n')}\n\n## 开始执行\n从第 1 步开始，一步一步执行。每完成一步立即标记并进入下一步。全部完成后给出最终汇报。`
@@ -344,7 +359,8 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
     let taskComplete = false
 
     // ═══ INNER LOOP: multi-round tool calling per step (like Claude Code) ═══
-    while (taskRounds < MAX_ROUNDS_PER_TASK && !taskComplete && !signal?.aborted) {
+    const maxRounds = analysisMode ? MAX_ROUNDS_ANALYSIS : MAX_ROUNDS_PER_TASK
+    while (taskRounds < maxRounds && !taskComplete && !signal?.aborted) {
       // Pause check inside inner loop
       while (_paused && !signal?.aborted) {
         await new Promise(r => setTimeout(r, 500))
@@ -368,21 +384,31 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
         } catch {}
       }
 
-      // ═══ Streaming API call ═══
+      // ═══ Streaming API call (with retry) ═══
       let response
-      try {
-        response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({ model, messages, tools: allTools, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3, stream: true }),
-          signal
-        })
-      } catch (e) {
-        if (e.name === 'AbortError') break
-        console.error('[codeAgent] fetch error:', e.message)
-        onProgress({ type: 'error', text: e.message })
-        break
+      let fetchRetries = 0
+      while (fetchRetries < 3) {
+        try {
+          response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model, messages, tools: allTools, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3, stream: true }),
+            signal
+          })
+          break // success
+        } catch (e) {
+          if (e.name === 'AbortError') break
+          fetchRetries++
+          console.error('[codeAgent] fetch error (retry ' + fetchRetries + '/3):', e.message)
+          if (fetchRetries >= 3) {
+            onProgress({ type: 'error', text: '网络错误，已重试3次: ' + e.message })
+            break
+          }
+          onProgress({ type: 'thinking', text: '\n[网络波动，重试中(' + fetchRetries + '/3)...]' })
+          await new Promise(r => setTimeout(r, 2000 * fetchRetries)) // exponential backoff
+        }
       }
+      if (!response) break  // all retries failed or aborted
 
       if (!response.ok) {
         const errText = await response.text().catch(() => '')
@@ -403,11 +429,12 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
         break
       }
 
-      // ═══ Parse SSE stream (accumulate, don't emit per-chunk) ═══
+      // ═══ Parse SSE stream (stream thinking in real-time) ═══
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let sseBuf = '', fullContent = '', finishReason = ''
       const toolAcc = {}
+      let lastStreamEmit = 0
 
       while (true) {
         const { done, value } = await reader.read()
@@ -426,10 +453,19 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
             if (!delta) continue
             if (delta.content) {
               fullContent += delta.content
-              // Emit streaming hint so frontend knows AI is alive (not full thinking yet)
-              onProgress({ type: 'streaming', text: delta.content.slice(0, 20) })
+              // Stream thinking in real-time (throttled to ~80ms for smoother output)
+              const now = Date.now()
+              if (now - lastStreamEmit > 80) {
+                onProgress({ type: 'streaming', text: fullContent })
+                lastStreamEmit = now
+              }
             }
             if (delta.tool_calls) {
+              // Flush remaining stream, then emit thinking_done so UI auto-collapses
+              if (fullContent) {
+                onProgress({ type: 'streaming', text: fullContent })
+                onProgress({ type: 'step_thinking_done' })
+              }
               for (const tc of delta.tool_calls) {
                 const idx = tc.index ?? 0
                 if (!toolAcc[idx]) toolAcc[idx] = { id: '', name: '', arguments: '' }
@@ -442,9 +478,11 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
           } catch {}
         }
       }
+      // Final stream emit
+      if (fullContent) onProgress({ type: 'streaming', text: fullContent })
 
       // ═══ Max-output-token recovery ═══
-      if (finishReason === 'length' && continueCount < 3) {
+      if (finishReason === 'length' && continueCount < CONTINUE_MAX) {
         onProgress({ type: 'step_thinking', text: fullContent || '(truncated)' })
         onProgress({ type: 'step_report', text: '输出被截断，自动恢复继续...' })
         messages.push({ role: 'assistant', content: fullContent || null })
@@ -462,7 +500,16 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
       if (toolCalls.length === 0) {
         // No tool calls → AI is reporting/analyzing
         const responseText = (fullContent || '').trim()
+
+        // Empty response recovery — retry instead of silently stopping
+        if (!responseText && taskRounds < 3) {
+          onProgress({ type: 'thinking', text: '\n[空响应，重试中...]' })
+          messages.push({ role: 'user', content: '请继续。你必须回复内容，不能空响应。' })
+          continue
+        }
+
         messages.push({ role: 'assistant', content: responseText || '完成' })
+        onProgress({ type: 'step_thinking_done' })  // auto-collapse thinking
         onProgress({ type: 'step_report', text: responseText || '步骤完成' })
         finalResult = responseText || '步骤完成'
         taskComplete = true
@@ -473,6 +520,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
       // Emit the AI's real thinking before tool execution
       if (fullContent && fullContent.trim()) {
         onProgress({ type: 'step_thinking', text: fullContent })
+        onProgress({ type: 'step_thinking_done' })  // signal UI: thinking complete, auto-collapse
       }
 
       messages.push({ role: 'assistant', content: fullContent || null, tool_calls: toolCalls })
@@ -548,12 +596,12 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
     }
   } catch {}
 
-  // ═══ Phase 4: Generate natural language final report (Bug 7 fix) ═══
+  // ═══ Phase 4: Generate natural language final report (streaming) ═══
   const isRawOutput = finalResult.startsWith('[OK]') || finalResult.startsWith('[ERROR]') ||
     finalResult.startsWith('[Sub-agent') || !finalResult || finalResult.length < 50
   if (isRawOutput || !finalResult.includes('完成')) {
     try {
-      const summaryPrompt = `你刚完成了一个编码任务。请用自然语言写一段简洁的最终汇报（100字内），内容包括：
+      const summaryPrompt = `你刚完成了一个编码任务。请用自然语言写一段简洁的最终汇报（200字内），内容包括：
 - 本次做了什么改动
 - 涉及了哪些文件（列出路径）
 - 有没有需要注意的地方
@@ -567,12 +615,36 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
       const finalRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages: messages.slice(-12), max_tokens: 500, temperature: 0.3 }),
+        body: JSON.stringify({ model, messages: messages.slice(-12), max_tokens: 800, temperature: 0.3, stream: true }),
         signal
       })
-      const finalData = await finalRes.json()
-      const report = finalData.choices?.[0]?.message?.content
-      if (report && report.length > 10) finalResult = report
+      // Stream the final report in real-time
+      if (finalRes.ok) {
+        const reader = finalRes.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = '', reportText = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n'); buf = lines.pop() || ''
+          for (const line of lines) {
+            const t = line.trim()
+            if (!t.startsWith('data:')) continue
+            const raw = t.slice(5).trim()
+            if (raw === '[DONE]') break
+            try {
+              const chunk = JSON.parse(raw)
+              const content = chunk.choices?.[0]?.delta?.content
+              if (content) {
+                reportText += content
+                onProgress({ type: 'report_stream', text: reportText })
+              }
+            } catch {}
+          }
+        }
+        if (reportText && reportText.length > 10) finalResult = reportText
+      }
     } catch {}
   }
 
@@ -699,10 +771,11 @@ function buildCodeSystemPrompt(projectPath, followContent, tasks) {
 4. 代码要健壮，包含必要的错误处理和导入
 5. 只用 SVG 图标，禁止 emoji
 6. 用户要画架构图/流程图/时序图时，直接用 mermaid 代码块输出（语言标记为 mermaid），系统会自动渲染
-7. 也可以用 ASCII 字符画简单图表（┌─┐└─┘├─┤│ 等 box-drawing 字符）
-8. 即使用户请求做不到的事，也要文字回复替代方案
-9. 任务按顺序执行，完成一步再做下一步
-10. 不要提前结束！所有步骤完成后才能说完成
+7. 用户要画数据图表（折线图、柱状图、饼图等）时，用 mermaid 代码块或生成一个独立的 SVG 文件。折线图/柱状图优先用纯 SVG 绘制并写入 .svg 文件，然后用 write_file 创建
+8. 也可以用 ASCII 字符画简单图表（┌─┐└─┘├─┤│ 等 box-drawing 字符）
+9. 即使用户请求做不到的事，也要文字回复替代方案
+10. 任务按顺序执行，完成一步再做下一步
+11. 不要提前结束！所有步骤完成后才能说完成
 
 ## 项目记忆 (Follow.md)
 ${followContent.slice(0, 1500)}
