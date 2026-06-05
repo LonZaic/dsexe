@@ -20,6 +20,7 @@ const os = require('os')
 const { createLoopDetector } = require('./antiloop')
 const { createBudgetTracker } = require('./tokenBudget')
 const { buildSystemPrompt, estimateTokenCount, shouldCompact, compactHistory, readProjectContext } = require('./context')
+const { sanitizeUserInput } = require('../promptGuard')
 const { checkToolPermission, classifyCommand, loadPermissionRules, MODES } = require('./permissions')
 const { loadHooks, executePreToolUse, executePostToolUse, executePostAgentStop, executeUserPromptSubmit } = require('./hooks')
 const { ensureMemDir, getMemoryPrompt, findRelevantMemories, extractMemoriesFromConversation, MEMORY_DIR } = require('./memory')
@@ -350,6 +351,13 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
   // Create detectors/trackers
   const loopDetector = createLoopDetector()
   const budgetTracker = createBudgetTracker()
+
+  // 输入净化：检测提示词注入攻击
+  const sanitized = sanitizeUserInput(task)
+  if (sanitized.flagged) {
+    console.warn('[promptGuard] Injection pattern detected in agent task')
+    onProgress({ type: 'warning', text: '检测到可能的提示词注入攻击，已净化输入' })
+  }
 
   const agentContext = {
     task,

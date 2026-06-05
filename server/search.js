@@ -142,4 +142,18 @@ function formatSearchResults(results) {
   }).join('\n\n')
 }
 
-module.exports = { webSearch, formatSearchResults }
+// ─── Dual-source: Bing + deep crawl in parallel ───
+async function webSearchDual(query, maxResults = 5) {
+  try {
+    const { searchAndCrawl, formatCombinedResults } = require('./crawler')
+    const combined = await searchAndCrawl(query, maxResults)
+    return formatCombinedResults(query, combined)
+  } catch (e) {
+    // Fallback to Bing-only
+    console.warn('[search] Dual search failed, fallback to Bing:', e.message)
+    const results = await webSearch(query, maxResults)
+    return formatSearchResults(results)
+  }
+}
+
+module.exports = { webSearch, webSearchDual, formatSearchResults }
