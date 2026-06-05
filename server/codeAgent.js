@@ -231,11 +231,14 @@ ${task}
 function isAnalysisTask(task) {
   const t = (task || '').toLowerCase()
   // Code CREATION patterns — these need full planning
+  // Must catch common Chinese shorthand: 写个, 画个, 做个, 改个, 删个 etc.
   const createPatterns = [
-    /(创建|新建|生成|写一个|编写|开发|构建一个|做一个|搭一个|实现一个|create|make|build|develop|implement|scaffold)/,
-    /(添加一个|增加一个|加一个|add a|add the)/,
+    /(创建|新建|生成|写一?个?|编写|开发|构建|做一?个?|搭一?个?|画一?个?|实现|create|make|build|develop|implement|scaffold|write)/,
+    /(添加|增加|加一?个?|add)/,
+    /(修改|改一?个?|改一下|编辑|edit|modify|change|update)/,
+    /(删除|删一?个?|删掉|delete|remove)/,
     /(重构|refactor|rewrite|重写)/,
-    /(修复|fix|debug|修一下|改一下这个bug)/,
+    /(修复|fix|debug|修一下)/,
   ]
   const needsFullPlan = createPatterns.some(r => r.test(t))
   return !needsFullPlan  // default to analysis mode unless explicitly creating
@@ -517,7 +520,11 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
         }
 
         messages.push({ role: 'assistant', content: responseText || '完成' })
-        onProgress({ type: 'step_thinking_done' })  // auto-collapse thinking
+        // Emit thinking first so UI shows the thought process, then done + report
+        if (fullContent && fullContent.trim()) {
+          onProgress({ type: 'step_thinking', text: fullContent })
+        }
+        onProgress({ type: 'step_thinking_done' })
         onProgress({ type: 'step_report', text: responseText || '步骤完成' })
         finalResult = responseText || '步骤完成'
         taskComplete = true

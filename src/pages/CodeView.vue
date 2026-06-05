@@ -125,75 +125,78 @@
               </span>
             </button>
 
-            <!-- Expanded body: think → act → report groups -->
+            <!-- Expanded body: sequential think → act → report (like chat mode) -->
             <div v-if="m._expanded" class="cv-card-body">
-              <!-- Live streaming output (real-time, shows what AI is saying right now) -->
-              <div v-if="m._streaming && m._running" class="cv-live-output">
-                <div class="cv-live-hdr">
+              <!-- Thinking process — ALWAYS visible while running, exact chat-mode design -->
+              <div v-if="m._running" class="cv-think-live">
+                <div class="cv-think-live-hdr" @click="m._thinkOpen = !m._thinkOpen">
                   <svg class="cv-think-dot" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".7"/></svg>
-                  <span class="cv-live-label">思考中</span>
+                  <span class="cv-think-live-label">思考中</span>
+                  <svg :class="['cv-think-chev', { open: m._thinkOpen !== false }]" width="10" height="10" viewBox="0 0 10 10" fill="none" style="margin-left:auto">
+                    <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
                 </div>
-                <div class="cv-live-body markdown-body" v-html="renderMd(m._streaming)"></div>
+                <div v-if="m._thinkOpen !== false" class="cv-think-body markdown-body"
+                  v-html="renderMd(m._streaming || '思考中...')"
+                  @scroll="onThinkScroll($event)"></div>
               </div>
 
-              <TransitionGroup name="group-fade">
-                <div v-for="(g, gi) in m._groups" :key="'g' + gi" class="cv-group"
-                  :class="{ 'cv-group-plan': g._isPlan, 'cv-group-err': g._isError }">
+              <!-- Flat sequential steps: think → tool → report → think → tool → report -->
+              <template v-for="(s, si) in m._flatSteps" :key="'s' + si">
+                <!-- Plan / Error banner -->
+                <div v-if="s._type === 'plan' || s._type === 'error'" class="cv-step-banner"
+                  :class="{ 'cv-step-err': s._type === 'error' }">{{ s._text }}</div>
 
-                  <!-- Thinking (AI's real output, collapsible) -->
-                  <div v-if="g.thinking && !g._isPlan" class="cv-think-bubble" @click="g._thinkOpen = !g._thinkOpen">
-                    <div class="cv-think-bubble-hdr">
-                      <svg class="cv-think-dot" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".7"/></svg>
-                      <span class="cv-think-bubble-label">思考</span>
-                      <svg class="cv-think-bubble-chev" :class="{ open: g._thinkOpen !== false }" width="9" height="9" viewBox="0 0 9 9" fill="none">
-                        <path d="M3 2l2 2 2-2" stroke="var(--text3)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    </div>
-                    <div v-if="g._thinkOpen !== false" class="cv-think-bubble-body markdown-body" v-html="renderMd(g.thinking)"></div>
+                <!-- Thinking block — collapsible, same design as chat mode -->
+                <div v-if="s._type === 'think'" class="cv-think-block"
+                  :class="{ 'cv-think-live': s._live }">
+                  <div class="cv-think-block-hdr" @click="s._open = !s._open">
+                    <svg :class="['cv-think-chev', { open: s._open !== false }]" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="cv-think-block-label">思考</span>
                   </div>
-
-                  <!-- Plan / error banners (no tool rows) -->
-                  <div v-if="g._isPlan || g._isError" class="cv-group-banner">{{ g.thinking }}</div>
-
-                  <!-- Tool rows -->
-                  <div v-for="t in g.tools" :key="t._k" class="cv-step" @click="t._open = !t._open">
-                    <div class="cv-step-row">
-                      <svg v-if="t._live" class="cv-step-spin" width="13" height="13" viewBox="0 0 13 13" fill="none">
-                        <circle cx="6.5" cy="6.5" r="5" stroke="var(--text3)" stroke-width="1" opacity=".25"/>
-                        <path d="M11.5 6.5a5 5 0 00-4-4.8" stroke="var(--accent)" stroke-width="1.1" stroke-linecap="round"/>
-                      </svg>
-                      <svg v-else width="13" height="13" viewBox="0 0 13 13" fill="none" class="cv-step-ok">
-                        <circle cx="6.5" cy="6.5" r="5.5" stroke="var(--green)" stroke-width=".8" opacity=".5"/>
-                        <path d="M3.5 6.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                      <span class="cv-step-phrase" :class="{ sweep: t._live }">{{ t._phrase }}</span>
-                      <span v-if="t._file" class="cv-step-file">{{ t._file }}</span>
-                      <span class="cv-step-tool">{{ t._tool }}</span>
-                      <svg v-if="t._detail" class="cv-step-chev" :class="{ open: t._open }" width="9" height="9" viewBox="0 0 9 9" fill="none">
-                        <path d="M2.5 3L4.5 5l2-2" stroke="var(--text3)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    </div>
-                    <div v-if="t._open && t._detail" class="cv-step-detail"><code class="cv-step-code">{{ t._detail }}</code></div>
-                  </div>
-
-                  <!-- Report (AI's analysis after seeing results) — rendered as markdown -->
-                  <div v-if="g.report" class="cv-report markdown-body" v-html="renderMd(g.report)"></div>
+                  <div v-if="s._open !== false" class="cv-think-block-body markdown-body" v-html="renderMd(s._text)"></div>
                 </div>
-              </TransitionGroup>
 
-              <!-- Streaming final report (real-time output as AI writes summary) -->
-              <div v-if="m._reportStream && m._running" class="cv-live-output cv-live-report">
-                <div class="cv-live-hdr">
+                <!-- Tool row -->
+                <div v-if="s._type === 'tool'" class="cv-step" @click="s._open = !s._open">
+                  <div class="cv-step-row">
+                    <svg v-if="s._live" class="cv-step-spin" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                      <circle cx="6.5" cy="6.5" r="5" stroke="var(--text3)" stroke-width="1" opacity=".25"/>
+                      <path d="M11.5 6.5a5 5 0 00-4-4.8" stroke="var(--accent)" stroke-width="1.1" stroke-linecap="round"/>
+                    </svg>
+                    <svg v-else width="13" height="13" viewBox="0 0 13 13" fill="none" class="cv-step-ok">
+                      <circle cx="6.5" cy="6.5" r="5.5" stroke="var(--green)" stroke-width=".8" opacity=".5"/>
+                      <path d="M3.5 6.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="cv-step-phrase" :class="{ sweep: s._live }">{{ s._phrase }}</span>
+                    <span v-if="s._file" class="cv-step-file">{{ s._file }}</span>
+                    <span class="cv-step-tool">{{ s._tool }}</span>
+                    <svg v-if="s._detail" class="cv-step-chev" :class="{ open: s._open }" width="9" height="9" viewBox="0 0 9 9" fill="none">
+                      <path d="M2.5 3L4.5 5l2-2" stroke="var(--text3)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <div v-if="s._open && s._detail" class="cv-step-detail"><code class="cv-step-code">{{ s._detail }}</code></div>
+                </div>
+
+                <!-- Report text — markdown rendered -->
+                <div v-if="s._type === 'report'" class="cv-report markdown-body" v-html="renderMd(s._text)"></div>
+              </template>
+
+              <!-- Streaming final report -->
+              <div v-if="m._reportStream && m._running" class="cv-think-live cv-report-live">
+                <div class="cv-think-live-hdr">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--green)" stroke-width="1"/><path d="M4 6l1.5 1.5L9 5" stroke="var(--green)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  <span class="cv-live-label">最终汇报</span>
+                  <span class="cv-think-live-label" style="color:var(--green)">最终汇报</span>
                 </div>
-                <div class="cv-live-body markdown-body" v-html="renderMd(m._reportStream)"></div>
+                <div class="cv-think-live-body markdown-body" v-html="renderMd(m._reportStream)"></div>
               </div>
 
               <div v-if="m._running" class="cv-scan"></div>
 
-              <!-- ═══ Task plan at bottom ═══ -->
-              <div v-if="m._todos && m._todos.length" class="cv-todos">
+              <!-- Task plan — only show when running OR has incomplete tasks -->
+              <div v-if="m._todos && m._todos.length && (m._running || m._todos.some(t => t.status !== 'completed'))" class="cv-todos">
                 <div class="cv-todos-hdr">
                   <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5l2 2 5-5" stroke="var(--green)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   <span>任务计划 ({{ m._todos.filter(t => t.status === 'completed').length }}/{{ m._todos.length }})</span>
@@ -358,7 +361,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUpdated, nextTick, watch } from 'vue'
 import { useCodeStore } from '../stores/codeStore.js'
 import { renderMarkdown, reinitMermaid } from '../utils/markdown.js'
 import { scanFileTree, readFileContent, newProject, runCodeAgent } from '../api/code.api.js'
@@ -465,29 +468,28 @@ const codeMessages = computed(() => {
       }
     }
     const events = m._events || []
-    const groups = buildStepGroups(events)
-    const lastGroup = groups[groups.length - 1]
+    const flatSteps = buildFlatSteps(events)
 
     // Dynamic summary based on current state
     let summary
     if (m._error) {
       summary = '出错了'
     } else if (m._done) {
-      summary = lastGroup?.report?.slice(0, 50) || '任务完成'
+      const lastReport = [...flatSteps].reverse().find(s => s._type === 'report')
+      summary = lastReport?._text?.slice(0, 50) || '任务完成'
     } else if (m._reportStream) {
       summary = '写汇报中...'
     } else if (m._streaming) {
       summary = '思考中...'
-    } else if (lastGroup?._isPlan && !lastGroup?.tools?.length) {
-      summary = lastGroup.thinking?.slice(0, 40) || '分析中...'
     } else {
-      const lastTool = lastGroup?.tools?.[lastGroup.tools.length - 1]
-      summary = lastTool ? (lastTool._live ? lastTool._phrase : '处理结果中...') : '分析任务中'
+      const lastLive = [...flatSteps].reverse().find(s => s._live)
+      summary = lastLive ? lastLive._phrase : '分析中...'
     }
 
     return {
       ...m,
-      _groups: groups,
+      _flatSteps: flatSteps,
+      _groups: flatSteps,  // keep for backward compat
       _streaming: m._streaming || '',
       _reportStream: m._reportStream || '',
       _summary: summary,
@@ -500,88 +502,82 @@ const codeMessages = computed(() => {
   })
 })
 
-// ─── Build step groups: think → act → report ═══
-function buildStepGroups(events) {
+// ─── Build flat sequential steps (like chat mode / Cursor) ═══
+function buildFlatSteps(events) {
   if (!events || !events.length) return []
-  const groups = []
-  let cur = null
+  const steps = []
+  let curThink = ''
+  let lastThinkIdx = -1
 
-  function flush() {
-    if (cur && (cur.thinking || cur.tools.length || cur.report)) {
-      groups.push(cur)
+  function flushThink() {
+    if (curThink.trim()) {
+      // New thinking always opens expanded so user sees it
+      // Previous thinking auto-collapses
+      if (lastThinkIdx >= 0 && steps[lastThinkIdx]) {
+        steps[lastThinkIdx]._open = false
+      }
+      steps.push({ _type: 'think', _text: curThink.trim(), _live: false, _open: true })
+      lastThinkIdx = steps.length - 1
     }
-    cur = null
+    curThink = ''
   }
 
   for (const e of events) {
-    // step_thinking: AI's real thinking before taking action
     if (e.type === 'step_thinking' && e.text) {
-      if (cur && cur.tools.length > 0) {
-        // Previous group had tools, this thinking starts a new group
-        flush()
-      }
-      if (!cur) cur = { thinking: '', tools: [], report: '' }
-      cur.thinking += e.text
+      curThink += e.text
     }
-    // step_report: AI's analysis after seeing tool results
-    if (e.type === 'step_report' && e.text) {
-      if (!cur) cur = { thinking: '', tools: [], report: '' }
-      cur.report += e.text
-      // Report means this think→act→report cycle is complete
-      flush()
+    if (e.type === 'step_thinking_done') {
+      flushThink()
     }
-    // tool_start: AI is taking action
     if (e.type === 'tool_start') {
-      if (!cur) cur = { thinking: '', tools: [], report: '' }
+      flushThink()
       const a = e.args || {}
       const detail = a.path || a.pattern || a.query || a.command || a.dir || ''
       const toolName = (e.tool || '')
-      // Extract short filename from path for display
       const fileName = a.path ? a.path.split('\\').pop().split('/').pop() : ''
-      cur.tools.push({
-        _k: 't' + cur.tools.length,
-        _tool: toolName.replace(/_/g, ' '),
-        _file: fileName,
+      steps.push({
+        _type: 'tool', _tool: toolName.replace(/_/g, ' '), _file: fileName,
         _detail: detail || (Object.keys(a).length ? JSON.stringify(a).slice(0, 200) : ''),
         _phrase: getAgentPhrase(toolName, 'active', toolName),
-        _hint: hintForCode(toolName, a),
         _live: true, _open: false,
       })
+      // Collapse previous thinking when tools start
+      if (lastThinkIdx >= 0 && steps[lastThinkIdx]) {
+        steps[lastThinkIdx]._open = false
+      }
     }
-    // tool_result
     if (e.type === 'tool_result') {
-      if (!cur) cur = { thinking: '', tools: [], report: '' }
-      for (let i = cur.tools.length - 1; i >= 0; i--) {
-        if (cur.tools[i]._live) {
-          cur.tools[i]._live = false
-          cur.tools[i]._phrase = getAgentPhrase(cur.tools[i]._tool.replace(/ /g, '_'), 'done', cur.tools[i]._tool.replace(/ /g, '_'))
-          if (!cur.tools[i]._detail && e.result) cur.tools[i]._detail = String(e.result).slice(0, 250)
+      for (let i = steps.length - 1; i >= 0; i--) {
+        if (steps[i]._type === 'tool' && steps[i]._live) {
+          steps[i]._live = false
+          const tn = steps[i]._tool.replace(/ /g, '_')
+          steps[i]._phrase = getAgentPhrase(tn, 'done', tn)
+          if (!steps[i]._detail && e.result) steps[i]._detail = String(e.result).slice(0, 250)
           break
         }
       }
     }
-    // Planning banner (start event no longer shows banner — it's noise)
-    if (e.type === 'planning') {
-      groups.push({ thinking: e.text || '正在规划任务...', tools: [], report: '', _isPlan: true })
+    if (e.type === 'step_report' && e.text) {
+      flushThink()
+      steps.push({ _type: 'report', _text: e.text })
     }
-    // Plan done / plan reused
+    if (e.type === 'planning') {
+      steps.push({ _type: 'plan', _text: e.text || '正在规划任务...' })
+    }
     if (e.type === 'plan_done') {
-      flush()
-      const label = e.quickMode ? '分析模式（直接执行）' : '规划完成，开始执行...'
-      groups.push({ thinking: label, tools: [], report: '', _isPlan: true })
+      flushThink()
+      steps.push({ _type: 'plan', _text: e.quickMode ? '分析模式' : '规划完成，开始执行' })
     }
     if (e.type === 'plan_reused') {
-      flush()
-      const pending = e.pendingCount || 0
-      groups.push({ thinking: `沿用已有计划（剩余 ${pending} 步）`, tools: [], report: '', _isPlan: true })
+      flushThink()
+      steps.push({ _type: 'plan', _text: `沿用已有计划（剩余 ${e.pendingCount || 0} 步）` })
     }
-    // Error
     if (e.type === 'error') {
-      groups.push({ thinking: (e.text || '未知错误'), tools: [], report: '', _isError: true })
+      steps.push({ _type: 'error', _text: e.text || '未知错误' })
     }
   }
-  flush() // flush remaining
-  return groups
+  flushThink()
+  return steps
 }
 
 function hintForCode(tool, args) {
@@ -764,7 +760,29 @@ async function onFileSelect(item) {
 
 function acceptAll() { while (store.pendingDiffs.length) store.acceptDiff(0) }
 function rejectAll() { while (store.pendingDiffs.length) store.rejectDiff(0) }
-function scrollDown() { nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight; reinitMermaid() }) }
+function onThinkScroll(e) {
+  const el = e.target
+  // If user scrolled away from bottom (>30px), mark as user-scrolled
+  const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  if (distFromBottom > 30) {
+    el._userScrolled = true
+  } else {
+    el._userScrolled = false
+  }
+}
+
+function scrollDown() {
+  nextTick(() => {
+    if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight
+    // Auto-scroll think body to bottom (unless user manually scrolled up)
+    const thinkBodies = document.querySelectorAll('.cv-think-body')
+    thinkBodies.forEach(el => {
+      if (el._userScrolled) return
+      el.scrollTop = el.scrollHeight
+    })
+    reinitMermaid()
+  })
+}
 
 const showSwitch = ref(false)
 function newCodeConv() { store.createConversation('Code 对话') }
@@ -804,6 +822,7 @@ async function send() {
   paused.value = false
 
   if (!store.currentId) store.createConversation(txt.slice(0, 30))
+  store.tasks = []  // clear old plan, fresh start for new message
   store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: txt })
   store.addUserMessage(txt)
 
@@ -835,8 +854,9 @@ async function send() {
   const _dbInterval = setInterval(_saveToDb, 5000)
 
   try {
-    // Pass existing plan for stability (don't regenerate on continue)
-    const existingPlan = store.tasks && store.tasks.length > 0
+    // Only reuse plan if there are PENDING tasks. All-done → fresh plan.
+    const pendingCount = (store.tasks || []).filter(t => !t.done).length
+    const existingPlan = pendingCount > 0
       ? store.tasks.map(t => ({ id: t.id, text: t.text, done: !!t.done }))
       : null
     await runCodeAgent(txt, store.projectPath, codeModel.value, async (event) => {
@@ -845,34 +865,21 @@ async function send() {
       _saveDirty = true
 
       if (e.type === 'start') {
-        // Agent started — show initial state immediately
-        aiMsg._streaming = '正在分析...'
+        aiMsg._streaming = (aiMsg._streaming || '') + '正在分析任务...\n\n'
         aiMsg._thinkOpen = true
       }
       if (e.type === 'planning' && e.text) {
-        // Show planning progress in the card
-        aiMsg._streaming = (aiMsg._streaming || '') + '\n' + e.text
+        aiMsg._streaming = (aiMsg._streaming || '') + e.text + '\n'
         aiMsg._thinkOpen = true
       }
       if (e.type === 'streaming' && e.text) {
-        // Real-time streaming thinking — show live in the card
+        // Replace with latest full content (server sends accumulated text)
         aiMsg._streaming = e.text
         aiMsg._thinkOpen = true
       }
       if (e.type === 'step_thinking_done') {
-        // Thinking phase complete — auto-collapse, move streaming content to thinking
-        aiMsg._thinkOpen = false
-        // Clear live stream so it doesn't duplicate with report groups
-        if (aiMsg._streaming) {
-          aiMsg.thinking = (aiMsg.thinking || '') + aiMsg._streaming
-          aiMsg._streaming = ''
-        }
-        // Also collapse thinking in all groups so previous groups auto-close
-        if (aiMsg._groups) {
-          aiMsg._groups.forEach(g => {
-            if (g._thinkOpen !== false) g._thinkOpen = false
-          })
-        }
+        // Keep streaming visible — just mark phase boundary, don't clear
+        // Content stays in the think box until task is done
       }
       if (e.type === 'thinking' && e.text) {
         aiMsg.thinking = (aiMsg.thinking || '') + e.text
@@ -901,12 +908,17 @@ async function send() {
       }
       if (e.type === 'plan_done' && e.tasks) {
         store.setTasks(e.tasks)
-        // Auto-populate todo list from plan
-        aiMsg._todos = e.tasks.map(t => ({ id: t.id, text: t.text, status: t.done ? 'completed' : 'pending' }))
+        // Only show task plan for multi-step plans (>1 task). Single-task = analysis mode, no plan UI.
+        if (e.tasks.length > 1) {
+          aiMsg._todos = e.tasks.map(t => ({ id: t.id, text: t.text, status: t.done ? 'completed' : 'pending' }))
+        }
       }
       if (e.type === 'plan_reused' && e.tasks) {
         store.setTasks(e.tasks)
-        aiMsg._todos = e.tasks.map(t => ({ id: t.id, text: t.text, status: t.done ? 'completed' : 'pending' }))
+        // Only show plan UI for multi-step plans
+        if (e.tasks.length > 1) {
+          aiMsg._todos = e.tasks.map(t => ({ id: t.id, text: t.text, status: t.done ? 'completed' : 'pending' }))
+        }
       }
       if (e.type === 'task_done' && e.taskId) {
         store.markTaskDone(e.taskId)
@@ -1060,43 +1072,42 @@ async function send() {
 
 .cv-card-body { padding: 2px 2px 8px; position: relative; }
 
-/* ─── Group: think → act → report ─── */
-.cv-group { margin-bottom: 6px; border-radius: var(--radius); overflow: hidden; }
-.cv-group-plan { background: rgba(79,125,255,.04); border: 1px solid rgba(79,125,255,.15); }
-.cv-group-err { background: rgba(248,81,73,.04); border: 1px solid rgba(248,81,73,.15); }
-.cv-group-banner { padding: 6px 10px; font-size: 12px; font-weight: 500; color: var(--accent); }
+/* ─── Step banners (plan / error) ─── */
+.cv-step-banner { padding: 5px 10px; font-size: 12px; font-weight: 400; color: var(--accent); background: rgba(79,125,255,.04); border-radius: 4px; margin-bottom: 4px; }
+.cv-step-err { color: var(--red); background: rgba(248,81,73,.04); }
 
-/* Thinking bubble — collapsible */
-.cv-think-bubble { margin: 0 0 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(79,125,255,.03); overflow: hidden; }
-
-/* Live streaming output */
-.cv-live-output { margin: 4px 0; border: 1px solid rgba(79,125,255,.3); border-radius: var(--radius); background: rgba(79,125,255,.04); overflow: hidden; animation: cvPulseBorder 2s ease-in-out infinite; }
-@keyframes cvPulseBorder { 0%,100%{border-color:rgba(79,125,255,.15)} 50%{border-color:rgba(79,125,255,.4)} }
-.cv-live-hdr { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); }
-.cv-live-label { font-size: 11px; font-weight: 500; color: var(--accent); }
-.cv-live-body { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); max-height: 400px; overflow-y: auto; }
-.cv-live-body :deep(p) { margin: 4px 0; }
-.cv-live-body :deep(pre) { margin: 6px 0; padding: 8px 10px; background: var(--bg3); border-radius: 4px; font-size: 11px; overflow-x: auto; }
-.cv-live-body :deep(code) { font-family: var(--font-mono); font-size: 11px; }
-.cv-live-body :deep(.mermaid-wrap) { margin: 6px 0; }
-.cv-live-body :deep(svg) { max-width: 100%; height: auto; }
-.cv-live-report { border-color: rgba(63,185,80,.3) !important; background: rgba(63,185,80,.03) !important; animation: cvPulseBorderGreen 2s ease-in-out infinite; }
-@keyframes cvPulseBorderGreen { 0%,100%{border-color:rgba(63,185,80,.12)} 50%{border-color:rgba(63,185,80,.35)} }
-.cv-live-report .cv-live-label { color: var(--green); }
-.cv-think-bubble-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer; user-select: none; }
-.cv-think-bubble-hdr:hover { background: rgba(79,125,255,.06); }
+/* ─── Live thinking block (streaming) ─── */
+.cv-think-live { margin: 4px 0; border: 1px solid rgba(79,125,255,.25); border-radius: var(--radius); background: rgba(79,125,255,.03); overflow: hidden; animation: cvPulseBorder 2s ease-in-out infinite; }
+@keyframes cvPulseBorder { 0%,100%{border-color:rgba(79,125,255,.12)} 50%{border-color:rgba(79,125,255,.35)} }
+.cv-think-live-hdr { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); }
 .cv-think-dot { flex-shrink: 0; animation: cvPulse 1.2s ease-in-out infinite; }
 @keyframes cvPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-.cv-think-bubble-label { font-size: 11px; font-weight: 500; color: var(--accent); }
-.cv-think-bubble-chev { flex-shrink: 0; opacity: .4; transition: transform .15s; margin-left: auto; }
-.cv-think-bubble-chev.open { transform: rotate(180deg); opacity: .7; }
-.cv-think-bubble-body { padding: 4px 10px 8px; font-size: 12px; line-height: 1.55; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
-.cv-think-bubble-body.markdown-body { white-space: normal; }
-.cv-think-bubble-body :deep(pre) { margin: 4px 0; padding: 6px 8px; background: var(--bg3); border-radius: 4px; font-size: 10px; overflow-x: auto; }
-.cv-think-bubble-body :deep(code) { font-family: var(--font-mono); font-size: 10px; }
-.cv-think-bubble-body :deep(p) { margin: 2px 0; }
+.cv-think-live-label { font-size: 11px; font-weight: 500; color: var(--accent); }
+.cv-think-live-body { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); max-height: 400px; overflow-y: auto; }
+.cv-think-body { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); max-height: 200px; overflow-y: auto; }
+.cv-think-live-body :deep(p) { margin: 4px 0; }
+.cv-think-live-body :deep(pre) { margin: 6px 0; padding: 8px 10px; background: var(--bg3); border-radius: 4px; font-size: 11px; overflow-x: auto; }
+.cv-think-live-body :deep(code) { font-family: var(--font-mono); font-size: 11px; }
+.cv-think-live-body :deep(.mermaid-wrap) { margin: 6px 0; }
+.cv-think-live-body :deep(svg) { max-width: 100%; height: auto; }
+.cv-report-live { border-color: rgba(63,185,80,.3) !important; background: rgba(63,185,80,.03) !important; animation: cvPulseBorderGreen 2s ease-in-out infinite; }
+@keyframes cvPulseBorderGreen { 0%,100%{border-color:rgba(63,185,80,.1)} 50%{border-color:rgba(63,185,80,.3)} }
 
-/* Report — markdown rendered */
+/* ─── Collapsed thinking block (like chat mode) ─── */
+.cv-think-block { margin-bottom: 2px; }
+.cv-think-block.cv-think-live { border: 1px solid rgba(79,125,255,.25); border-radius: var(--radius); background: rgba(79,125,255,.03); }
+.cv-think-block-hdr { display: flex; align-items: center; gap: 5px; padding: 4px 8px; cursor: pointer; user-select: none; border-radius: 4px; }
+.cv-think-block-hdr:hover { background: var(--bg3); }
+.cv-think-chev { flex-shrink: 0; color: var(--text3); transition: transform .15s; }
+.cv-think-chev.open { transform: rotate(90deg); }
+.cv-think-block-label { font-size: 11px; font-weight: 500; color: var(--text3); }
+.cv-think-block-body { padding: 4px 10px 8px 23px; font-size: 12px; line-height: 1.55; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+.cv-think-block-body.markdown-body { white-space: normal; }
+.cv-think-block-body :deep(pre) { margin: 4px 0; padding: 6px 8px; background: var(--bg3); border-radius: 4px; font-size: 10px; overflow-x: auto; }
+.cv-think-block-body :deep(code) { font-family: var(--font-mono); font-size: 10px; }
+.cv-think-block-body :deep(p) { margin: 2px 0; }
+
+/* ─── Report — markdown ─── */
 .cv-report { padding: 6px 10px 6px 12px; font-size: 13px; line-height: 1.6; color: var(--text); }
 .cv-report :deep(pre) { margin: 8px 0; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; font-size: 11px; }
 .cv-report :deep(code) { font-family: var(--font-mono); font-size: 11px; }
@@ -1143,9 +1154,6 @@ async function send() {
 .cv-final { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); border-top: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
 .cv-final-err { border-top-color: rgba(248,81,73,.2); }
 
-/* ─── Group/step fade ─── */
-.group-fade-enter-active { animation: cvStepIn .25s ease both; }
-@keyframes cvStepIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ─── Chat bar ─── */
 .cv-chat-bar { padding: 8px 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
