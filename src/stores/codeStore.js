@@ -15,6 +15,7 @@ import {
   updateCodeConversationProject,
   deleteCodeConversation,
 } from '../db/database.js'
+import { readFileContent } from '../api/code.api.js'
 
 export const useCodeStore = defineStore('code', () => {
   const projectPath = ref('')
@@ -70,12 +71,20 @@ export const useCodeStore = defineStore('code', () => {
   // ─── Diffs ───
   function addDiff(diff) { pendingDiffs.value.push(diff) }
 
-  function acceptDiff(diffIdx) {
+  async function acceptDiff(diffIdx) {
     const d = pendingDiffs.value[diffIdx]
     if (!d) return
-    const f = openFiles.value.find(x => x.path === d.filePath)
-    if (f) { f.content = d.newCode; f.originalContent = d.newCode }
     pendingDiffs.value.splice(diffIdx, 1)
+    // Re-read actual file content from disk instead of using truncated diff data
+    try {
+      const { content } = await readFileContent(d.filePath)
+      const f = openFiles.value.find(x => x.path === d.filePath)
+      if (f) { f.content = content; f.originalContent = content }
+    } catch {
+      // Fallback: use diff content if file read fails
+      const f = openFiles.value.find(x => x.path === d.filePath)
+      if (f) f.content = d.newCode
+    }
   }
 
   function rejectDiff(diffIdx) { pendingDiffs.value.splice(diffIdx, 1) }

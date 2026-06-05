@@ -125,45 +125,68 @@
               </span>
             </button>
 
-            <!-- Expanded body -->
+            <!-- Expanded body: think → act → report groups -->
             <div v-if="m._expanded" class="cv-card-body">
-              <!-- Thinking / streaming text -->
-              <div v-if="m.thinking" class="cv-think">
-                <div class="cv-think-hdr" @click="m._thinkOpen = !m._thinkOpen">
-                  <svg class="cv-think-dot" :class="{ idle: !m._running }" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".7"/></svg>
-                  <span class="cv-think-label">{{ m._running ? '思考中...' : '思考过程' }}</span>
-                  <svg class="cv-think-chev" :class="{ open: m._thinkOpen }" width="9" height="9" viewBox="0 0 9 9" fill="none">
-                    <path d="M3 2l2 2 2-2" stroke="var(--text3)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </div>
-                <div v-if="m._thinkOpen" class="cv-think-body">{{ m.thinking }}</div>
-              </div>
+              <TransitionGroup name="group-fade">
+                <div v-for="(g, gi) in m._groups" :key="'g' + gi" class="cv-group"
+                  :class="{ 'cv-group-plan': g._isPlan, 'cv-group-err': g._isError }">
 
-              <!-- Step rows -->
-              <TransitionGroup name="step-fade">
-                <div v-for="s in m._steps" :key="s._k" class="cv-step">
-                  <div class="cv-step-row" @click="s._open = !s._open">
-                    <svg v-if="s._live" class="cv-step-spin" width="11" height="11" viewBox="0 0 11 11" fill="none">
-                      <circle cx="5.5" cy="5.5" r="4" stroke="var(--text3)" stroke-width=".8" opacity=".25"/>
-                      <path d="M9.5 5.5a4 4 0 00-3.2-3.9" stroke="var(--accent)" stroke-width="1" stroke-linecap="round"/>
-                    </svg>
-                    <svg v-else width="11" height="11" viewBox="0 0 11 11" fill="none" class="cv-step-ok">
-                      <circle cx="5.5" cy="5.5" r="4.5" stroke="var(--green)" stroke-width=".8" opacity=".5"/>
-                      <path d="M3.5 5.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span class="cv-step-phrase" :class="{ sweep: s._live }">{{ s._phrase }}</span>
-                    <span class="cv-step-tool">{{ s._tool }}</span>
-                    <svg v-if="s._detail" class="cv-step-chev" :class="{ open: s._open }" width="9" height="9" viewBox="0 0 9 9" fill="none">
-                      <path d="M2.5 3L4.5 5l2-2" stroke="var(--text3)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                  <!-- Thinking (AI's real output, collapsible) -->
+                  <div v-if="g.thinking && !g._isPlan" class="cv-think-bubble" @click="g._thinkOpen = !g._thinkOpen">
+                    <div class="cv-think-bubble-hdr">
+                      <svg class="cv-think-dot" width="7" height="7" viewBox="0 0 7 7" fill="none"><circle cx="3.5" cy="3.5" r="2.5" fill="var(--accent)" opacity=".7"/></svg>
+                      <span class="cv-think-bubble-label">思考</span>
+                      <svg class="cv-think-bubble-chev" :class="{ open: g._thinkOpen !== false }" width="9" height="9" viewBox="0 0 9 9" fill="none">
+                        <path d="M3 2l2 2 2-2" stroke="var(--text3)" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                    <div v-if="g._thinkOpen !== false" class="cv-think-bubble-body">{{ g.thinking }}</div>
                   </div>
-                  <div v-if="s._hint" class="cv-step-hint">{{ s._hint }}</div>
-                  <div v-if="s._open && s._detail" class="cv-step-detail"><code class="cv-step-code">{{ s._detail }}</code></div>
+
+                  <!-- Plan / error banners (no tool rows) -->
+                  <div v-if="g._isPlan || g._isError" class="cv-group-banner">{{ g.thinking }}</div>
+
+                  <!-- Tool rows -->
+                  <div v-for="t in g.tools" :key="t._k" class="cv-step" @click="t._open = !t._open">
+                    <div class="cv-step-row">
+                      <svg v-if="t._live" class="cv-step-spin" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <circle cx="6.5" cy="6.5" r="5" stroke="var(--text3)" stroke-width="1" opacity=".25"/>
+                        <path d="M11.5 6.5a5 5 0 00-4-4.8" stroke="var(--accent)" stroke-width="1.1" stroke-linecap="round"/>
+                      </svg>
+                      <svg v-else width="13" height="13" viewBox="0 0 13 13" fill="none" class="cv-step-ok">
+                        <circle cx="6.5" cy="6.5" r="5.5" stroke="var(--green)" stroke-width=".8" opacity=".5"/>
+                        <path d="M3.5 6.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span class="cv-step-phrase" :class="{ sweep: t._live }">{{ t._phrase }}</span>
+                      <span class="cv-step-tool">{{ t._tool }}</span>
+                      <span v-if="t._hint" class="cv-step-hint-inline">{{ t._hint }}</span>
+                      <svg v-if="t._detail" class="cv-step-chev" :class="{ open: t._open }" width="9" height="9" viewBox="0 0 9 9" fill="none">
+                        <path d="M2.5 3L4.5 5l2-2" stroke="var(--text3)" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                    <div v-if="t._open && t._detail" class="cv-step-detail"><code class="cv-step-code">{{ t._detail }}</code></div>
+                  </div>
+
+                  <!-- Report (AI's analysis after seeing results) — rendered as markdown -->
+                  <div v-if="g.report" class="cv-report markdown-body" v-html="renderMd(g.report)"></div>
                 </div>
               </TransitionGroup>
               <div v-if="m._running" class="cv-scan"></div>
 
-              <!-- Final output -->
+              <!-- ═══ Task plan at bottom ═══ -->
+              <div v-if="m._todos && m._todos.length" class="cv-todos">
+                <div class="cv-todos-hdr">
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M2 5l2 2 5-5" stroke="var(--green)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>任务计划 ({{ m._todos.filter(t => t.status === 'completed').length }}/{{ m._todos.length }})</span>
+                </div>
+                <div v-for="t in m._todos" :key="t.id" class="cv-todo-item" :class="{ done: t.status === 'completed', active: t.status === 'in_progress' }">
+                  <svg v-if="t.status === 'completed'" width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="var(--green)" stroke-width=".8"/><path d="M3.5 5.5l1.3 1.3 2.7-2.7" stroke="var(--green)" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg v-else-if="t.status === 'in_progress'" width="11" height="11" viewBox="0 0 11 11" fill="none" class="cv-todo-spin"><circle cx="5.5" cy="5.5" r="4" stroke="var(--accent)" stroke-width=".8" opacity=".3"/><path d="M9.5 5.5a4 4 0 00-3.2-3.9" stroke="var(--accent)" stroke-width=".9" stroke-linecap="round"/></svg>
+                  <svg v-else width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="4.5" stroke="var(--text3)" stroke-width=".8"/></svg>
+                  <span class="cv-todo-text">{{ t.text }}</span>
+                </div>
+              </div>
+
               <div v-if="!m._running && m.html" class="cv-final markdown-body" v-html="m.html"></div>
               <div v-if="m._error && m.html" class="cv-final cv-final-err markdown-body" v-html="m.html"></div>
             </div>
@@ -193,6 +216,15 @@
               </div>
             </Transition>
           </div>
+          <button v-if="loading" class="cv-pause" @click="togglePause" :title="paused ? '恢复' : '暂停'">
+            <svg v-if="!paused" width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <rect x="2" y="2" width="3" height="8" rx="1" fill="currentColor"/>
+              <rect x="7" y="2" width="3" height="8" rx="1" fill="currentColor"/>
+            </svg>
+            <svg v-else width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M3 2l8 4-8 4V2z" fill="currentColor"/>
+            </svg>
+          </button>
           <button class="cv-send" :class="{ off: !task.trim() }" :disabled="!task.trim()" @click="send">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 1.5l11 5.5-11 5.5 3-5.5-3-5.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
           </button>
@@ -311,6 +343,8 @@ import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useCodeStore } from '../stores/codeStore.js'
 import { renderMarkdown } from '../utils/markdown.js'
 import { scanFileTree, readFileContent, newProject, runCodeAgent } from '../api/code.api.js'
+import { BASE_URL } from '../api/client.js'
+import { getApiHeaders } from '../utils/apiHeaders.js'
 import { useI18n } from '../composables/useI18n.js'
 import { getAgentPhrase } from '../utils/agentPhrases.js'
 import hljs from 'highlight.js'
@@ -318,6 +352,7 @@ window.hljs = hljs
 
 const { t } = useI18n()
 const store = useCodeStore()
+const renderMd = (text) => renderMarkdown(text || '')
 const task = ref('')
 const inputRef = ref(null)
 const codeRef = ref(null)
@@ -331,6 +366,7 @@ const showNewProject = ref(false)
 const newProjectName = ref('')
 const newProjectParent = ref('E:\\')
 const loading = ref(false)
+const paused = ref(false)
 const codeModel = ref(localStorage.getItem('code_model') || 'deepseek-v4-pro')
 const showModelMenu = ref(false)
 let _isCreatingProject = false
@@ -339,6 +375,14 @@ function pickModel(m) {
   codeModel.value = m
   showModelMenu.value = false
   try { localStorage.setItem('code_model', m) } catch {}
+}
+
+async function togglePause() {
+  paused.value = !paused.value
+  const endpoint = paused.value ? '/api/code/pause' : '/api/code/resume'
+  try {
+    await fetch(`${BASE_URL}${endpoint}`, { method: 'POST', headers: getApiHeaders({}) })
+  } catch {}
 }
 
 const previewPath = computed(() => {
@@ -401,12 +445,13 @@ const codeMessages = computed(() => {
       }
     }
     const events = m._events || []
-    const steps = buildSteps(events)
-    const lastPhrase = steps.length ? steps[steps.length - 1]._phrase : '分析任务中'
+    const groups = buildStepGroups(events)
+    const lastGroup = groups[groups.length - 1]
+    const lastPhrase = lastGroup ? (lastGroup.tools[lastGroup.tools.length - 1]?._phrase || lastGroup.thinking?.slice(0, 30)) : null
     return {
       ...m,
-      _steps: steps,
-      _summary: m._error ? '出错了' : (m._done ? (lastPhrase || '任务完成') : (steps.find(s => s._live)?._phrase || '分析任务中')),
+      _groups: groups,
+      _summary: m._error ? '出错了' : (m._done ? (lastPhrase || '任务完成') : (lastGroup?.thinking?.slice(0, 40) || '分析任务中')),
       _running: m._done === false && !m._error,
       _done: m._done !== false,
       _error: !!m._error,
@@ -416,50 +461,80 @@ const codeMessages = computed(() => {
   })
 })
 
-// ─── Build step rows from events (Agent-style) ───
-function buildSteps(events) {
+// ─── Build step groups: think → act → report ═══
+function buildStepGroups(events) {
   if (!events || !events.length) return []
-  const out = []
-  for (const e of events) {
-    // Thinking / narration
-    if (e.type === 'thinking' && e.text) {
-      const t = e.text.split(/[.。\n]/)[0].slice(0, 60)
-      if (t.length > 2) out.push({ _k: 'n' + out.length, _nar: true, _text: t })
+  const groups = []
+  let cur = null
+
+  function flush() {
+    if (cur && (cur.thinking || cur.tools.length || cur.report)) {
+      groups.push(cur)
     }
-    // Tool start
+    cur = null
+  }
+
+  for (const e of events) {
+    // step_thinking: AI's real thinking before taking action
+    if (e.type === 'step_thinking' && e.text) {
+      if (cur && cur.tools.length > 0) {
+        // Previous group had tools, this thinking starts a new group
+        flush()
+      }
+      if (!cur) cur = { thinking: '', tools: [], report: '' }
+      cur.thinking += e.text
+    }
+    // step_report: AI's analysis after seeing tool results
+    if (e.type === 'step_report' && e.text) {
+      if (!cur) cur = { thinking: '', tools: [], report: '' }
+      cur.report += e.text
+      // Report means this think→act→report cycle is complete
+      flush()
+    }
+    // tool_start: AI is taking action
     if (e.type === 'tool_start') {
+      if (!cur) cur = { thinking: '', tools: [], report: '' }
       const a = e.args || {}
       const detail = a.path || a.pattern || a.query || a.command || a.dir || ''
-      out.push({
-        _k: 't' + out.length,
-        _tool: (e.tool || '').replace(/_/g, ' '),
+      const toolName = (e.tool || '')
+      cur.tools.push({
+        _k: 't' + cur.tools.length,
+        _tool: toolName.replace(/_/g, ' '),
         _detail: detail || (Object.keys(a).length ? JSON.stringify(a).slice(0, 200) : ''),
-        _phrase: getAgentPhrase(e.tool, 'active'),
-        _hint: hintForCode(e.tool, a),
+        _phrase: getAgentPhrase(toolName, 'active', toolName),
+        _hint: hintForCode(toolName, a),
         _live: true, _open: false,
       })
     }
-    // Tool result
+    // tool_result
     if (e.type === 'tool_result') {
-      for (let i = out.length - 1; i >= 0; i--) {
-        if (out[i]._live) {
-          out[i]._live = false
-          out[i]._phrase = getAgentPhrase(out[i]._tool.replace(/ /g, '_'), 'done')
-          if (!out[i]._detail && e.result) out[i]._detail = String(e.result).slice(0, 250)
+      if (!cur) cur = { thinking: '', tools: [], report: '' }
+      for (let i = cur.tools.length - 1; i >= 0; i--) {
+        if (cur.tools[i]._live) {
+          cur.tools[i]._live = false
+          cur.tools[i]._phrase = getAgentPhrase(cur.tools[i]._tool.replace(/ /g, '_'), 'done', cur.tools[i]._tool.replace(/ /g, '_'))
+          if (!cur.tools[i]._detail && e.result) cur.tools[i]._detail = String(e.result).slice(0, 250)
           break
         }
       }
     }
-    // Plan done
+    // Plan done / plan reused
     if (e.type === 'plan_done') {
-      out.push({ _k: 'plan', _nar: true, _text: '规划完成，开始执行...' })
+      flush()
+      groups.push({ thinking: '规划完成，开始执行...', tools: [], report: '', _isPlan: true })
+    }
+    if (e.type === 'plan_reused') {
+      flush()
+      const pending = e.pendingCount || 0
+      groups.push({ thinking: `沿用已有计划（剩余 ${pending} 步）`, tools: [], report: '', _isPlan: true })
     }
     // Error
     if (e.type === 'error') {
-      out.push({ _k: 'err', _nar: true, _text: '错误: ' + (e.text || '未知') })
+      groups.push({ thinking: (e.text || '未知错误'), tools: [], report: '', _isError: true })
     }
   }
-  return out
+  flush() // flush remaining
+  return groups
 }
 
 function hintForCode(tool, args) {
@@ -563,7 +638,7 @@ watch(() => store.activeFilePath, async (fp) => {
   const existing = store.openFiles.find(f => f.path === fp)
   if (existing && existing.content && existing.content.length > 10) return
   try {
-    const { content, name } = await readFileContent(fp)
+    const { content, name } = await readFileContent(fp, store.projectPath)
     store.updateFileContent(fp, content)
     if (!existing) store.openFile(fp, name, content)
   } catch {
@@ -653,6 +728,9 @@ function doSwitchProject() {
   store.currentId = null
   store.openTabs = []
   store.messagesMap = {}
+  store.tasks = []          // 清空旧项目计划
+  store.pendingDiffs = []   // 清空旧项目 diff
+  store.handoffCount = 0    // 重置接力计数
   store.setProject('', '')
   store.setFileTree([])
   store.saveSession()
@@ -676,6 +754,7 @@ async function send() {
   if (!txt || loading.value || !store.projectPath) return
   task.value = ''
   loading.value = true
+  paused.value = false
 
   if (!store.currentId) store.createConversation(txt.slice(0, 30))
   store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: txt })
@@ -708,6 +787,10 @@ async function send() {
   const _dbInterval = setInterval(_saveToDb, 5000)
 
   try {
+    // Pass existing plan for stability (don't regenerate on continue)
+    const existingPlan = store.tasks && store.tasks.length > 0
+      ? store.tasks.map(t => ({ id: t.id, text: t.text, done: !!t.done }))
+      : null
     await runCodeAgent(txt, store.projectPath, codeModel.value, async (event) => {
       const e = event
       aiMsg._events.push(e)
@@ -728,12 +811,34 @@ async function send() {
         const fname = e.fileName || e.filePath.split('\\').pop()
         store.openFile(e.filePath, fname, '// 加载中...')
         try {
-          const { content } = await readFileContent(e.filePath)
+          const { content } = await readFileContent(e.filePath, store.projectPath)
           store.updateFileContent(e.filePath, content)
         } catch {}
       }
-      if (e.type === 'plan_done' && e.tasks) store.setTasks(e.tasks)
-      if (e.type === 'task_done' && e.taskId) store.markTaskDone(e.taskId)
+      if (e.type === 'plan_done' && e.tasks) {
+        store.setTasks(e.tasks)
+        // Auto-populate todo list from plan
+        aiMsg._todos = e.tasks.map(t => ({ id: t.id, text: t.text, status: t.done ? 'completed' : 'pending' }))
+      }
+      if (e.type === 'plan_reused' && e.tasks) {
+        store.setTasks(e.tasks)
+        aiMsg._todos = e.tasks.map(t => ({ id: t.id, text: t.text, status: t.done ? 'completed' : 'pending' }))
+      }
+      if (e.type === 'task_done' && e.taskId) {
+        store.markTaskDone(e.taskId)
+        // Check off in todo list
+        if (aiMsg._todos) {
+          const td = aiMsg._todos.find(t => t.id === e.taskId)
+          if (td) td.status = 'completed'
+        }
+      }
+      if (e.type === 'task_start' && e.taskId) {
+        // Mark current task as in_progress in todo list
+        if (aiMsg._todos) {
+          const td = aiMsg._todos.find(t => t.id === e.taskId)
+          if (td) td.status = 'in_progress'
+        }
+      }
 
       if (e.type === 'done') {
         aiMsg._done = true
@@ -742,13 +847,28 @@ async function send() {
           aiMsg.html = renderMarkdown(e.text)
         }
         aiMsg._thinkOpen = false
+        // Persist todos
+        if (e.todos && e.todos.length) {
+          aiMsg._todos = e.todos
+        }
+      }
+      if (e.type === 'subagent_start') {
+        aiMsg.thinking = (aiMsg.thinking || '') + '\n[子Agent启动: ' + (e.text || '').slice(0, 30) + ']'
+        aiMsg._thinkOpen = true
+      }
+      if (e.type === 'subagent_done') {
+        aiMsg.thinking = (aiMsg.thinking || '') + '\n[子Agent完成]'
+      }
+      if (e.type === 'context_usage' && e.pct >= 80) {
+        aiMsg.thinking = (aiMsg.thinking || '') + '\n[上下文 ' + e.pct + '% — 自动精简继续]'
+        aiMsg._thinkOpen = true
       }
       if (e.type === 'error') {
         aiMsg._error = true
         aiMsg.html = renderMarkdown('**出错**: ' + (e.text || '未知'))
       }
       await nextTick(); scrollDown()
-    }, _abortCtrl.signal)
+    }, _abortCtrl.signal, existingPlan)
   } catch (e) {
     if (e.name !== 'AbortError') {
       aiMsg._error = true
@@ -852,31 +972,46 @@ async function send() {
 
 .cv-card-body { padding: 2px 2px 8px; position: relative; }
 
-/* ─── Thinking ─── */
-.cv-think { margin: 0 4px 4px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: rgba(79,125,255,.03); }
-.cv-think-hdr { display: flex; align-items: center; gap: 5px; padding: 5px 10px; cursor: pointer; user-select: none; transition: background .12s; }
-.cv-think-hdr:hover { background: var(--bg3); }
-.cv-think-dot { flex-shrink: 0; animation: cvPulse 1.2s ease-in-out infinite; }
-.cv-think-dot.idle { animation: none; opacity: .4; }
-@keyframes cvPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-.cv-think-label { font-size: 11px; font-weight: 500; color: var(--accent); letter-spacing: .3px; }
-.cv-think-chev { flex-shrink: 0; opacity: .4; transition: transform .15s; margin-left: auto; }
-.cv-think-chev.open { transform: rotate(180deg); opacity: .7; }
-.cv-think-body { padding: 4px 10px 8px; font-size: 11px; line-height: 1.5; color: var(--text3); white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; font-style: italic; }
+/* ─── Group: think → act → report ─── */
+.cv-group { margin-bottom: 6px; border-radius: var(--radius); overflow: hidden; }
+.cv-group-plan { background: rgba(79,125,255,.04); border: 1px solid rgba(79,125,255,.15); }
+.cv-group-err { background: rgba(248,81,73,.04); border: 1px solid rgba(248,81,73,.15); }
+.cv-group-banner { padding: 6px 10px; font-size: 12px; font-weight: 500; color: var(--accent); }
 
-/* ─── Step rows ─── */
-.cv-step { margin-bottom: 1px; }
-.cv-step-row { display: flex; align-items: center; gap: 6px; padding: 4px 10px; cursor: pointer; border-radius: 5px; transition: background .12s; font-size: 12px; font-weight: 300; }
-.cv-step-row:hover { background: var(--bg3); }
+/* Thinking bubble — collapsible */
+.cv-think-bubble { margin: 0 0 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(79,125,255,.03); overflow: hidden; }
+.cv-think-bubble-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer; user-select: none; }
+.cv-think-bubble-hdr:hover { background: rgba(79,125,255,.06); }
+.cv-think-dot { flex-shrink: 0; animation: cvPulse 1.2s ease-in-out infinite; }
+@keyframes cvPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.cv-think-bubble-label { font-size: 11px; font-weight: 500; color: var(--accent); }
+.cv-think-bubble-chev { flex-shrink: 0; opacity: .4; transition: transform .15s; margin-left: auto; }
+.cv-think-bubble-chev.open { transform: rotate(180deg); opacity: .7; }
+.cv-think-bubble-body { padding: 4px 10px 8px; font-size: 12px; line-height: 1.55; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; }
+
+/* Report — markdown rendered */
+.cv-report { padding: 6px 10px 6px 12px; font-size: 13px; line-height: 1.6; color: var(--text); }
+.cv-report :deep(pre) { margin: 8px 0; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-x: auto; font-size: 11px; }
+.cv-report :deep(code) { font-family: var(--font-mono); font-size: 11px; }
+.cv-report :deep(p) { margin: 4px 0; }
+.cv-report :deep(ul), .cv-report :deep(ol) { padding-left: 20px; margin: 4px 0; }
+/* Mermaid diagrams */
+.mermaid-wrap { margin: 8px 0; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+.mermaid-wrap :deep(svg) { max-width: 100%; height: auto; }
+
+/* ─── Step rows (new: inline hint, richer) ─── */
+.cv-step { margin-bottom: 1px; border-radius: 5px; transition: background .15s; }
+.cv-step:hover { background: var(--bg3); }
+.cv-step-row { display: flex; align-items: center; gap: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; font-weight: 300; }
 .cv-step-spin { animation: cvSpin 1.2s linear infinite; flex-shrink: 0; }
 .cv-step-ok { flex-shrink: 0; }
-.cv-step-phrase { color: var(--text); font-size: 12px; font-weight: 300; flex-shrink: 0; white-space: nowrap; transition: color .35s; }
+.cv-step-phrase { color: var(--text); font-size: 12px; font-weight: 400; flex-shrink: 0; white-space: nowrap; }
 .cv-step-phrase.sweep { background: linear-gradient(90deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%); background-size: 200% 100%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: cvSweep 2.2s ease-in-out infinite; }
 @keyframes cvSweep { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
-.cv-step-tool { color: var(--text3); font-size: 9px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; opacity: .6; }
+.cv-step-tool { color: var(--text3); font-size: 10px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; opacity: .6; }
+.cv-step-hint-inline { color: var(--text3); font-size: 10px; font-weight: 300; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; max-width: 120px; }
 .cv-step-chev { flex-shrink: 0; opacity: .35; transition: transform .15s; }
 .cv-step-chev.open { transform: rotate(180deg); opacity: .65; }
-.cv-step-hint { padding: 0 10px 0 27px; font-size: 11px; color: var(--text3); font-weight: 300; font-style: italic; line-height: 1.4; }
 .cv-step-detail { margin: 2px 10px 4px 27px; padding: 6px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; }
 .cv-step-code { font-size: 10px; font-family: var(--font-mono); color: var(--text2); white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
 
@@ -884,13 +1019,23 @@ async function send() {
 .cv-scan { height: 1px; margin-top: 4px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: cvScan 2s ease-in-out infinite; opacity: .4; }
 @keyframes cvScan { 0% { opacity: 0; transform: scaleX(0); transform-origin: left; } 50% { opacity: 1; transform: scaleX(1); transform-origin: left; } 100% { opacity: 0; transform: scaleX(0); transform-origin: right; } }
 
+/* ─── Task plan at bottom ─── */
+.cv-todos { margin: 8px 4px 4px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+.cv-todos-hdr { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 12px; font-weight: 500; color: var(--green); border-bottom: 1px solid var(--border); }
+.cv-todo-item { display: flex; align-items: center; gap: 7px; padding: 5px 10px; font-size: 12px; color: var(--text2); font-weight: 300; transition: all .2s; }
+.cv-todo-item.done { color: var(--text3); }
+.cv-todo-item.done .cv-todo-text { text-decoration: line-through; opacity: .5; }
+.cv-todo-item.active { color: var(--accent); font-weight: 500; background: rgba(79,125,255,.04); }
+.cv-todo-spin { animation: cvSpin 1.2s linear infinite; }
+.cv-todo-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ─── Final output ─── */
 .cv-final { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); border-top: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
 .cv-final-err { border-top-color: rgba(248,81,73,.2); }
 
-/* ─── Step fade ─── */
-.step-fade-enter-active { animation: cvStepIn .2s ease both; }
-@keyframes cvStepIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+/* ─── Group/step fade ─── */
+.group-fade-enter-active { animation: cvStepIn .25s ease both; }
+@keyframes cvStepIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ─── Chat bar ─── */
 .cv-chat-bar { padding: 8px 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
@@ -899,6 +1044,8 @@ async function send() {
 .cv-input::placeholder { color: var(--text3); }
 .cv-send { width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .12s; }
 .cv-send.off { background: var(--bg4); color: var(--text3); cursor: not-allowed; }
+.cv-pause { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .12s; }
+.cv-pause:hover { background: var(--bg4); color: var(--text); border-color: var(--accent); }
 .cv-model-btn { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .cv-model-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); transition: background .15s; }
 .cv-model-dot.pro { background: var(--accent); }

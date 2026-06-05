@@ -29,8 +29,12 @@ router.post('/code/filetree', (req, res) => {
 // ─── Read file content ───
 router.post('/code/read-file', (req, res) => {
   try {
-    const { filePath } = req.body
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' })
+    let { filePath, projectPath } = req.body
+    // Resolve relative paths against project root if provided
+    if (projectPath && !path.isAbsolute(filePath)) {
+      filePath = path.resolve(projectPath, filePath)
+    }
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found: ' + filePath })
     const content = fs.readFileSync(filePath, 'utf-8')
     const name = path.basename(filePath)
     res.json({ filePath, name, content, lines: content.split('\n').length })
@@ -56,7 +60,7 @@ router.post('/code/new-project', (req, res) => {
 
 // ─── Run code agent (SSE) ───
 router.post('/code/run', async (req, res) => {
-  const { task, projectPath, model = 'deepseek-v4-pro' } = req.body
+  const { task, projectPath, model = 'deepseek-v4-pro', existingTasks } = req.body
   const apiKey = req.headers['x-api-key'] || process.env.DEEPSEEK_API_KEY || ''
 
   res.setHeader('Content-Type', 'text/event-stream')
@@ -77,13 +81,35 @@ router.post('/code/run', async (req, res) => {
     await executeCodeTask({
       projectPath, task, apiKey, model,
       onProgress: (event) => { send(event) },
-      signal: abortController.signal
+      signal: abortController.signal,
+      existingTasks: existingTasks || null
     })
   } catch (e) {
     send({ type: 'error', text: e.message })
   }
   send({ type: 'done', text: '' })
   res.end()
+})
+
+// ─── Pause / Resume ───
+router.post('/code/pause', (req, res) => {
+  try {
+    const { pauseAgent } = require('../codeAgent')
+    pauseAgent()
+    res.json({ ok: true, status: 'paused' })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+router.post('/code/resume', (req, res) => {
+  try {
+    const { resumeAgent } = require('../codeAgent')
+    resumeAgent()
+    res.json({ ok: true, status: 'resumed' })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
 })
 
 // ─── Get Follow.md ───
@@ -106,6 +132,25 @@ router.post('/code/follow-search', (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
+})
+
+// ─── Resume / list sessions ───
+const { listSessions, loadSession, deleteSession, buildRecoveryPrompt } = require('../sessionRecovery')
+
+router.post('/code/sessions', (req, res) => {
+  try {
+    const { projectPath } = req.body
+    const sessions = listSessions(projectPath)
+    res.json({ sessions })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+router.post('/code/resume', (req, res) => {
+  try {
+    const { projectPath, sessionId, task } = req.body
+    const prompt = buildRecoveryPrompt(projectPath, sessionId, task)
+    res.json({ recoveryPrompt: prompt })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ─── Get Task.md ───

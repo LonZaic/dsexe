@@ -148,17 +148,34 @@ const TOOL_CATEGORY = {
 }
 
 /**
- * Get a random phrase for a tool category and phase
- * @param {string} toolName - e.g. 'Read', 'Write', 'Bash'
+ * Deterministic hash for stable phrase selection
+ */
+function hashStr(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i)
+    h |= 0
+  }
+  return Math.abs(h)
+}
+
+/**
+ * Get a deterministic phrase for a tool category and phase.
+ * Same toolName + seed always returns the same phrase.
+ * @param {string} toolName - e.g. 'read_file', 'write_file', 'run_command'
  * @param {'active'|'done'} phase
+ * @param {string} [seed] - deterministic seed (e.g. tool name)
  * @returns {string}
  */
-export function getAgentPhrase(toolName, phase = 'active') {
+export function getAgentPhrase(toolName, phase = 'active', seed = '') {
   const category = TOOL_CATEGORY[toolName] || guessCategory(toolName)
   const pool = PHRASES[category]
   if (!pool) return phase === 'active' ? '处理中' : '完成'
   const phrases = pool[phase] || pool.active
-  return phrases[Math.floor(Math.random() * phrases.length)]
+  // Use deterministic hash from tool name + seed to pick a stable phrase
+  const key = seed || toolName
+  const idx = hashStr(key) % phrases.length
+  return phrases[idx]
 }
 
 function guessCategory(name) {

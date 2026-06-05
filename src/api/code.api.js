@@ -16,10 +16,10 @@ export async function scanFileTree(projectPath) {
   return res.json()
 }
 
-export async function readFileContent(filePath) {
+export async function readFileContent(filePath, projectPath = '') {
   const res = await fetch(`${BASE_URL}/api/code/read-file`, {
     method: 'POST', headers: authHeaders(),
-    body: JSON.stringify({ filePath })
+    body: JSON.stringify({ filePath, projectPath })
   })
   return res.json()
 }
@@ -32,10 +32,10 @@ export async function newProject(projectPath, projectName) {
   return res.json()
 }
 
-export async function runCodeAgent(task, projectPath, model, onEvent, signal) {
+export async function runCodeAgent(task, projectPath, model, onEvent, signal, existingTasks = null) {
   const res = await fetch(`${BASE_URL}/api/code/run`, {
     method: 'POST', headers: authHeaders(),
-    body: JSON.stringify({ task, projectPath, model }),
+    body: JSON.stringify({ task, projectPath, model, existingTasks }),
     signal,
   })
   const reader = res.body.getReader()
