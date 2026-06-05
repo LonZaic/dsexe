@@ -254,6 +254,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
   const isHandoff = keepContent && !keepContent.includes('等待 AI 在上下文满时生成') && keepContent.length > 100
 
   onProgress({ type: 'start', task, projectPath, isHandoff })
+  let _handoffGenerated = false  // track whether handoff was generated this session
 
   // ─── Phase 1: Plan (skip for analysis/quick tasks) ───
   const analysisMode = !existingTasks && isAnalysisTask(task)
@@ -376,8 +377,22 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
       taskRounds++
       onProgress({ type: 'round', round: totalRounds, taskRound: taskRounds })
 
-      // ═══ Context compaction check (improved) ═══
+      // ═══ Context compaction + handoff ═══
       const currentTokens = estimateTokens(messages)
+      const handoffThreshold = Math.floor(CONTEXT_LIMIT * 0.75)
+
+      // Generate handoff BEFORE compaction — captures full context
+      if (currentTokens > handoffThreshold && !_handoffGenerated && !analysisMode) {
+        _handoffGenerated = true
+        onProgress({ type: 'thinking', text: '\n[上下文使用' + Math.round(currentTokens/CONTEXT_LIMIT*100) + '%，生成接力文档...]' })
+        try {
+          const done = allTasks.filter(t => t.done)
+          const pending = allTasks.filter(t => !t.done)
+          await generateHandoff(projectPath, task, messages, done, pending, apiKey, signal)
+          onProgress({ type: 'handoff_ready', tokens: currentTokens, pct: Math.round(currentTokens/CONTEXT_LIMIT*100) })
+        } catch { onProgress({ type: 'thinking', text: '\n[接力文档生成失败，继续工作]' }) }
+      }
+
       if (currentTokens > COMPACT_THRESHOLD) {
         onProgress({ type: 'thinking', text: '\n[上下文压缩中...]' })
         try {
@@ -667,7 +682,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
   const totalChars = JSON.stringify(messages).length
   const estimatedTokens = Math.ceil(totalChars / 2.5)
   const pctUsed = Math.round(estimatedTokens / CONTEXT_LIMIT * 100)
-  onProgress({ type: 'context_usage', pct: pctUsed, tokens: estimatedTokens, rounds: totalRounds, filesCreated: totalFilesCreated, todos: _todos })
+  onProgress({ type: 'context_usage', pct: pctUsed, tokens: estimatedTokens, rounds: totalRounds, filesCreated: totalFilesCreated, todos: _todos, handoffReady: _handoffGenerated })
 
   // Session recording
   try { recordEvents(projectPath, sessionId, [{ type: 'complete', task, rounds: totalRounds, filesCreated: totalFilesCreated }]) } catch {}

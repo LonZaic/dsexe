@@ -193,6 +193,21 @@
 
               <div v-if="m._running" class="cv-scan"></div>
 
+              <!-- Handoff — offer to continue in new session -->
+              <div v-if="m._handoffReady" class="cv-handoff">
+                <div class="cv-handoff-icon">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 6l4 4 4-4" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round"/></svg>
+                </div>
+                <div class="cv-handoff-text">
+                  <span class="cv-handoff-title">上下文已用 {{ m._handoffPct || '80' }}%</span>
+                  <span class="cv-handoff-desc">接力文档已生成（Follow.md + Task.md + Keep.md），新对话可直接继续</span>
+                </div>
+                <button class="cv-handoff-btn" @click="startHandoffSession(m)" :disabled="loading">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  新对话继续
+                </button>
+              </div>
+
               <!-- Task plan — collapsible, auto-collapse when all done -->
               <div v-if="m._todos && m._todos.length" class="cv-todos">
                 <div class="cv-todos-hdr" @click="toggleTodosOpen(m)" style="cursor:pointer">
@@ -821,6 +836,16 @@ function refreshFileTree() {
     } catch {}
   }, 500)
 }
+function startHandoffSession(msg) {
+  // Create a new conversation that will pick up Follow.md + Task.md + Keep.md
+  const title = (task.value || '继续任务').slice(0, 30)
+  store.createConversation(title)
+  // The next agent run will detect isHandoff=true and inject all three docs
+  // Clear handoff flag for the new card
+  msg._handoffReady = false
+  scrollDown()
+}
+
 function toggleTodosOpen(msg) {
   // Toggle on the original reactive message so Vue tracks it
   const id = msg._id
@@ -1034,8 +1059,15 @@ async function send() {
       if (e.type === 'subagent_done') {
         aiMsg.thinking = (aiMsg.thinking || '') + '\n[子Agent完成]'
       }
+      if (e.type === 'handoff_ready') {
+        aiMsg._handoffReady = true
+        aiMsg._handoffTokens = e.tokens
+        aiMsg._handoffPct = e.pct
+        aiMsg._thinkOpen = true
+      }
       if (e.type === 'context_usage' && e.pct >= 80) {
-        aiMsg.thinking = (aiMsg.thinking || '') + '\n[上下文 ' + e.pct + '% — 自动精简继续]'
+        aiMsg.thinking = (aiMsg.thinking || '') + '\n[上下文 ' + e.pct + '%]'
+        if (e.handoffReady) aiMsg._handoffReady = true
         aiMsg._thinkOpen = true
       }
       if (e.type === 'error') {
@@ -1211,6 +1243,16 @@ async function send() {
 .cv-step-chev.open { transform: rotate(180deg); opacity: .65; }
 .cv-step-detail { margin: 2px 10px 4px 27px; padding: 6px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 5px; }
 .cv-step-code { font-size: 10px; font-family: var(--font-mono); color: var(--text2); white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+
+/* ─── Handoff banner ─── */
+.cv-handoff { margin: 8px 4px; padding: 10px 12px; border: 1px solid rgba(79,125,255,.25); border-radius: var(--radius); background: rgba(79,125,255,.04); display: flex; align-items: center; gap: 10px; }
+.cv-handoff-icon { flex-shrink: 0; color: var(--accent); }
+.cv-handoff-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.cv-handoff-title { font-size: 12px; font-weight: 500; color: var(--accent); }
+.cv-handoff-desc { font-size: 11px; color: var(--text3); font-weight: 300; }
+.cv-handoff-btn { display: flex; align-items: center; gap: 5px; flex-shrink: 0; padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--accent); background: var(--accent); color: #fff; font-size: 12px; font-family: inherit; font-weight: 400; cursor: pointer; transition: all .12s; white-space: nowrap; }
+.cv-handoff-btn:hover { background: var(--accent-hover); }
+.cv-handoff-btn:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ─── Scan line ─── */
 .cv-scan { height: 1px; margin-top: 4px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: cvScan 2s ease-in-out infinite; opacity: .4; }
