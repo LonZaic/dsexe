@@ -303,24 +303,27 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
   if (analysisMode) {
     systemPrompt = `你是项目分析和可视化助手，工作在项目"${projectPath}"。
 
-## 你的能力
-- 你可以使用工具浏览项目文件（list_files, read_file, glob, grep）来了解项目
-- 你可以创建 SVG 图表文件（write_file 写入 .svg）来可视化数据
-- 你可以输出 mermaid 代码块来画架构图、流程图、时序图等
+## 核心规则（最重要！）
+**你必须输出用户能直接看到的内容！** 不能只调用工具然后说"完成"就结束。
+- 用户要求画图 → 先直接在回复里输出 \`\`\`svg ... \`\`\` 或 \`\`\`mermaid ... \`\`\` 代码块让用户看到
+- 用户要求了解项目 → 读文件后输出分析结果
+- 任何操作后必须给出可见的文字/图表输出，不能空回复
 
-## 规则
-1. 收到用户请求后，先立即开始思考和分析（边想边输出）
-2. 先读关键文件（README、package.json、主要源码）了解项目
-3. 用户问什么就回答什么，不要过度扩展
-4. 用户要画图时：
-   - 架构图/流程图/时序图 → 输出 mermaid 代码块
-   - 数据折线图/柱状图/饼图 → 生成纯 SVG 写入 .svg 文件
+## 画图规则
+1. 用户要画 SVG 图（太阳、动物、风景等创意绘画）→ 直接在回复里用 \`\`\`svg 代码块输出，不要只写文件
+2. 用户要画架构图/流程图/时序图 → \`\`\`mermaid 代码块
+3. 用户要画数据图表 → \`\`\`svg 代码块或 \`\`\`mermaid 代码块
+4. 画完图后可以再用 write_file 存为 .svg 文件，但**先在聊天里让用户看到图**
 5. 禁止 emoji，只用 SVG 图标
-6. 只读文件和分析，不要修改现有代码文件
-7. 一定要回复，不能空响应
-8. 思考过程要清晰，让用户看到你在做什么`
 
-    userPrompt = `## 用户请求\n${task}\n\n先思考和浏览项目文件了解情况，然后直接回答用户。如果需要画图，用 mermaid 代码块或生成 SVG 文件。`
+## 回答规则
+1. 收到请求后立即思考并输出（流式），不要让用户等
+2. 先读相关文件了解项目，再输出分析
+3. 用户问什么就回答什么，不要过度扩展
+4. 只读文件和分析，不要修改现有代码
+5. **一句话总结也是回复，但图已经在代码块里展示了就不需要额外说"已完成"**`
+
+    userPrompt = `## 用户请求\n${task}\n\n**重要**: 如果要画图，直接在回复里输出 \`\`\`svg 或 \`\`\`mermaid 代码块，让用户立刻看到。不要只写文件不输出内容。如果是了解项目，读文件后输出分析结果。**一定要有可见的输出！**`
   } else {
     systemPrompt = buildCodeSystemPrompt(projectPath, followContent, allTasks) + skillsPrompt
     userPrompt = `## 任务计划\n${allTasks.map(t => `- [ ] ${t.id}. ${t.text}`).join('\n')}\n\n## 开始执行\n从第 1 步开始，一步一步执行。每完成一步立即标记并进入下一步。全部完成后给出最终汇报。`
@@ -501,10 +504,15 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
         // No tool calls → AI is reporting/analyzing
         const responseText = (fullContent || '').trim()
 
-        // Empty response recovery — retry instead of silently stopping
-        if (!responseText && taskRounds < 3) {
-          onProgress({ type: 'thinking', text: '\n[空响应，重试中...]' })
-          messages.push({ role: 'user', content: '请继续。你必须回复内容，不能空响应。' })
+        // Short/empty response recovery — demand visible output
+        const hadToolCalls = messages.some(m => m.role === 'tool')
+        const isTooShort = responseText.length < 20 && hadToolCalls
+        const isEmpty = !responseText
+
+        if ((isEmpty || isTooShort) && taskRounds < EMPTY_RETRY_MAX) {
+          const reason = isEmpty ? '空响应' : '回复太短(' + responseText.length + '字)'
+          onProgress({ type: 'thinking', text: '\n[' + reason + '，要求AI给出可见输出...]' })
+          messages.push({ role: 'user', content: '你的回复太短或为空。用户看不到任何内容。请在聊天里直接输出 SVG/Mermaid 代码块或分析文字，让用户能看到结果。不要只写文件。' })
           continue
         }
 

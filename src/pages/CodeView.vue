@@ -560,11 +560,7 @@ function buildStepGroups(events) {
         }
       }
     }
-    // Start / Planning banners
-    if (e.type === 'start') {
-      const msg = e.isHandoff ? '接力继续执行...' : '收到消息，开始分析...'
-      groups.push({ thinking: msg, tools: [], report: '', _isPlan: true })
-    }
+    // Planning banner (start event no longer shows banner — it's noise)
     if (e.type === 'planning') {
       groups.push({ thinking: e.text || '正在规划任务...', tools: [], report: '', _isPlan: true })
     }

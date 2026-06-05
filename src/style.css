@@ -110,6 +110,60 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 
+/* ═══ SVG Renderer ═══ */
+.svg-render-wrap {
+  margin: 8px 0;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+.svg-render-wrap svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+.svg-chart-wrap {
+  background: #fff;
+}
+.svg-render-error {
+  border-color: rgba(248,81,73,.3);
+  padding: 12px;
+  color: var(--red);
+  font-size: 12px;
+}
+.svg-render-error::before {
+  content: '[SVG render error]';
+  display: block;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+/* ═══ Mermaid renderer ═══ */
+.mermaid-wrap {
+  margin: 8px 0;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+.mermaid-wrap svg {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-error {
+  padding: 12px;
+  border: 1px solid rgba(248,81,73,.25);
+  border-radius: var(--radius-sm);
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(248,81,73,.04);
+  white-space: pre-wrap;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
   body { font-size: 14px; }

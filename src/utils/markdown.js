@@ -1,26 +1,39 @@
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+import { renderAll } from './mediaRenderer.js'
 
-// Track pending mermaid elements for deferred rendering
-let _mermaidPending = false
-let _mermaidTimer = null
-
-// Wire marked to highlight.js + Mermaid + SVG support
+// ═══ Marked config — SVG & Mermaid code blocks get dedicated wrappers ═══
 marked.use({
     renderer: {
         code({ text, lang }) {
-            // Mermaid diagrams
+            // Mermaid diagram
             if (lang === 'mermaid') {
-                const id = 'mermaid_' + Math.random().toString(36).slice(2, 8)
-                return `<div class="mermaid-wrap"><pre class="mermaid" id="${id}">${text}</pre></div>\n`
+                const id = 'm_' + Math.random().toString(36).slice(2, 8)
+                return `<div class="mermaid-wrap"><pre class="mermaid" id="${id}">${escapeHtml(text)}</pre></div>\n`
             }
-            // SVG code blocks — render as raw SVG (for charts/diagrams)
+            // SVG chart — render inline directly
             if (lang === 'svg' || lang === 'svg-chart') {
-                return `<div class="mermaid-wrap svg-chart-wrap">${text}</div>\n`
+                // Extract <svg>...</svg> and render immediately
+                let svg = text.trim()
+                const m = svg.match(/<svg[\s\S]*?<\/svg>/i)
+                if (m) svg = m[0]
+                if (svg.startsWith('<svg')) {
+                    return `<div class="svg-render-wrap svg-chart-wrap" data-svg="${escapeAttr(svg)}" data-rendered="true">${svg}</div>\n`
+                }
+                // Not valid SVG — show as code
+                return `<pre><code class="hljs">${escapeHtml(text)}</code></pre>\n`
             }
+            // Regular code block
             const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
             const highlighted = hljs.highlight(text, { language }).value
             return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>\n`
+        },
+        // Raw inline HTML containing SVG (AI writes <svg> directly in markdown)
+        html({ text }) {
+            if (/^\s*<svg\b/i.test(text) && /<\/svg>\s*$/i.test(text)) {
+                return `<div class="svg-render-wrap" data-svg="${escapeAttr(text)}" data-rendered="true">${text}</div>`
+            }
+            return text
         },
         link({ href, title, tokens }) {
             const text = marked.parseInline(tokens)
@@ -30,58 +43,30 @@ marked.use({
     },
 })
 
-// Also ensure raw HTML (including SVG) passes through marked unscathed
-// marked v18 allows raw HTML by default, but we make it explicit
-marked.setOptions({
-    breaks: true,
-    gfm: true,
-})
+marked.setOptions({ breaks: true, gfm: true })
 
-function initMermaid(retries = 0) {
-  if (typeof window === 'undefined') return
-  if (!window.mermaid) {
-    if (retries < 30) setTimeout(() => initMermaid(retries + 1), 200)
-    return
-  }
-  try {
-    const els = document.querySelectorAll('.mermaid:not([data-processed])')
-    if (els.length > 0) {
-      window.mermaid.run({ nodes: Array.from(els) }).catch(() => {})
-      els.forEach(el => el.setAttribute('data-processed', 'true'))
-    }
-  } catch {}
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-export function reinitMermaid() {
-  initMermaid(20)
-  // Also try again shortly after (for streaming content that may still be loading)
-  setTimeout(() => initMermaid(20), 300)
-  setTimeout(() => initMermaid(20), 800)
+function escapeAttr(s) {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+// ─── Public API ───
 export function renderMarkdown(text) {
     if (!text) return ''
     try {
         const html = marked.parse(text)
-        // Schedule mermaid rendering — DOM + library may not be ready yet
-        // Use staggered retries to catch streaming content as it appears
-        if (!_mermaidPending) {
-            _mermaidPending = true
-            clearTimeout(_mermaidTimer)
-            _mermaidTimer = setTimeout(() => { _mermaidPending = false }, 2000)
-            setTimeout(() => initMermaid(), 100)
-            setTimeout(() => initMermaid(), 400)
-            setTimeout(() => initMermaid(), 1200)
-        } else {
-            // If already pending, just fire once
-            setTimeout(() => initMermaid(), 50)
-        }
+        // Trigger render for anything the MutationObserver hasn't caught yet
+        setTimeout(() => renderAll(), 0)
         return html
     } catch {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>')
+        return escapeHtml(text).replace(/\n/g, '<br>')
     }
+}
+
+export function reinitMermaid() {
+    setTimeout(() => renderAll(), 50)
+    setTimeout(() => renderAll(), 300)
 }
