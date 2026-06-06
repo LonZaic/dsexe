@@ -58,14 +58,14 @@ function isCommandSafe(cmd) {
   return { safe: true }
 }
 
-// ─── DuckDuckGo Web Search ───
-const { webSearch, formatSearchResults } = require('../search')
+// ─── Web Search: Bing + 深度爬虫组合模式 ───
+const { webSearchDual } = require('../search')
 
 async function duckDuckGoSearch(query) {
   try {
-    const results = await webSearch(query, 5)
-    if (!results.length) return `No results found for: ${query}`
-    return formatSearchResults(results)
+    const text = await webSearchDual(query, 5)
+    if (!text) return `No results found for: ${query}`
+    return text
   } catch (e) {
     return `Search failed (network error) for: ${query}`
   }
@@ -179,7 +179,7 @@ const TOOLS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Search the web using DuckDuckGo. Use for looking up current information or documentation.',
+      description: 'Search the web using Bing + advanced crawler. Returns deep-crawled page content alongside search snippets. Use for looking up current information, news, or documentation.',
       parameters: {
         type: 'object',
         properties: { query: { type: 'string', description: 'Search query' } },

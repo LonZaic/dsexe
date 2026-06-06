@@ -766,7 +766,7 @@ function buildMessages(tempId) {
     sysContent += '\n\n## 天气查询\n有 get_weather(city, days) 工具。**任何天气相关的问题必须调用此工具**——它能获取真实的实时天气数据。返回的是结构化天气数据（日期/天气/温度/降水概率/风速），你必须用 Markdown 表格呈现，并配上自然语言总结。绝对不要用 web_search 查天气。'
 
     // Web search — always available
-    sysContent += '\n\n## 联网搜索\n有 web_search(query) 工具。搜到的结果是结构化文本，你必须**彻底消化后用自然语言重新讲出来**——就像这些知识本来就在你脑子里一样。**严禁照搬搜索条目列表、严禁用任何尖括号标签包裹内容。** 搜到不相关的就换关键词再搜。'
+    sysContent += '\n\n## 联网搜索\n有 web_search(query) 工具（Bing搜索+深度爬虫组合模式）。搜索结果包含Bing摘要和深度抓取的页面正文内容，你必须**彻底消化后用自然语言重新讲出来**——就像这些知识本来就在你脑子里一样。**严禁照搬搜索条目列表、严禁用任何尖括号标签包裹内容。** 搜到不相关的就换关键词再搜。'
 
     const msgs = [{ role: 'system', content: sysContent }]
     for (const m of prevMsgs) {
@@ -934,7 +934,7 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             type: 'function',
             function: {
                 name: 'web_search',
-                description: 'Search the web for general information. For weather/forecast queries, use get_weather instead.',
+                description: 'Search the web using Bing + advanced crawler. Returns deep-crawled page content alongside search snippets. For weather/forecast queries, use get_weather instead.',
                 parameters: {
                     type: 'object',
                     properties: { query: { type: 'string', description: 'Search query' } },
@@ -1203,16 +1203,15 @@ function onDeleteMessage(item) {
 
 async function handleWebSearch(query) {
     try {
-        const res = await fetch('/api/search', {
+        // 使用 dual search: Bing搜索 + 深度爬虫组合模式
+        const res = await fetch('/api/search/dual', {
             method: 'POST',
             headers: getApiHeaders({}),
             body: JSON.stringify({ query, maxResults: 5 })
         })
         const data = await res.json()
-        if (!data.results?.length) return 'No results found for: ' + query
-        return data.results.map((r, i) =>
-            `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet || ''}`
-        ).join('\n\n')
+        if (!data.text || data.text === 'No results found for: ' + query) return 'No results found for: ' + query
+        return data.text
     } catch (e) {
         return 'Search failed: ' + e.message
     }

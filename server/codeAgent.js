@@ -7,7 +7,7 @@
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { webSearch, formatSearchResults } = require('./search')
+const { webSearch, webSearchDual, formatSearchResults } = require('./search')
 const { initFollow, updateFollowSection, readFollow, hybridSearch } = require('./followManager')
 const { initTask, readTask, writeTasks } = require('./taskManager')
 const { initKeep, generateHandoff, buildNewSessionPrompt } = require('./keepManager')
@@ -113,6 +113,8 @@ async function executeTool(name, args, projectRoot) {
         return execSync(args.command, { cwd: root, timeout: 30000, encoding: 'utf-8', shell: true }).trim() || '(ok)'
       }
       case 'web_search': {
+        const dualResult = await webSearchDual(args.query, 5)
+        if (dualResult && dualResult.length > 20) return dualResult
         const results = await webSearch(args.query, 5)
         if (!results.length) return `No results found for: ${args.query}`
         return formatSearchResults(results)
