@@ -163,37 +163,42 @@
                   </svg>
                 </button>
             </div>
-            <div class="msg-actions" v-if="!streaming && text">
-                <button v-if="role === 'ai'" :title="t('regenerate')" @click="$emit('regenerate')">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M1.5 3.5V7.5H5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M11.5 9.5V5.5H7.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M10.18 3.73a5 5 0 0 0-7.2-.48L1.5 4.5M11.5 8.5l-1.48 1.25a5 5 0 0 1-7.2-.48" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-                <button :title="t('copy')" @click="copyText">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
-                    <path d="M2.5 9V2.5A1 1 0 0 1 3.5 1.5H9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  </svg>
-                </button>
-                <button v-if="role === 'user'" :title="t('editMsg')" @click="$emit('edit', text)">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M9.5 1.5a1 1 0 0 1 1.41 0l.59.59a1 1 0 0 1 0 1.41L5 10l-2.5.5L3 8l6.5-6.5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-                <button :title="t('delete')" class="del" @click="$emit('delete')">
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M2.5 3.5h8M4.5 3.5V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M2 3.5h9v.5a.5.5 0 0 1-.5.5h-.5l-.4 6a.5.5 0 0 1-.5.5H3.9a.5.5 0 0 1-.5-.5l-.4-6H2.5a.5.5 0 0 1-.5-.5V3.5z" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
+            <div class="msg-bottom-row" v-if="(role === 'ai' && yammyActive) || (!streaming && text)">
+                <div class="msg-actions" v-if="!streaming && text">
+                    <button v-if="role === 'ai'" :title="t('regenerate')" @click="$emit('regenerate')">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <path d="M1.5 3.5V7.5H5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M11.5 9.5V5.5H7.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M10.18 3.73a5 5 0 0 0-7.2-.48L1.5 4.5M11.5 8.5l-1.48 1.25a5 5 0 0 1-7.2-.48" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                    <button :title="t('copy')" @click="copyText">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                        <path d="M2.5 9V2.5A1 1 0 0 1 3.5 1.5H9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                      </svg>
+                    </button>
+                    <button v-if="role === 'user'" :title="t('editMsg')" @click="$emit('edit', text)">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <path d="M9.5 1.5a1 1 0 0 1 1.41 0l.59.59a1 1 0 0 1 0 1.41L5 10l-2.5.5L3 8l6.5-6.5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                    <button :title="t('delete')" class="del" @click="$emit('delete')">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <path d="M2.5 3.5h8M4.5 3.5V2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M2 3.5h9v.5a.5.5 0 0 1-.5.5h-.5l-.4 6a.5.5 0 0 1-.5.5H3.9a.5.5 0 0 1-.5-.5l-.4-6H2.5a.5.5 0 0 1-.5-.5V3.5z" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                </div>
+                <div v-if="role === 'ai' && yammyActive" class="yammy-wrap" :class="{ 'yammy-shaking': yammyShaking }" @click.stop="$emit('yammyClick')">
+                    <img ref="yammyImg" src="/yammy.gif" class="yammy-gif" alt="yammy" />
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { renderMarkdown } from '../utils/markdown.js'
 import { loadFile } from '../utils/fileDB.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
@@ -217,9 +222,12 @@ const props = defineProps({
     agentEvents: { type: Array, default: () => [] },
     devicePicker: { type: Boolean, default: false },
     designSummary: { type: String, default: '' },
+    yammyActive: { type: Boolean, default: false },
+    yammyPlaying: { type: Boolean, default: false },
+    yammyShaking: { type: Boolean, default: false },
 })
 
-defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign'])
+defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick'])
 
 async function previewFile(f) {
     if (f.type?.startsWith('image/')) {
@@ -294,6 +302,58 @@ const phaseLabel = computed(() => {
     if (props.designProgress >= 20) return t('thinkComplete')
     if (props.designProgress >= 10) return t('thinkingDots')
     return t('drawing')
+})
+
+// ─── Yammy GIF pause/play via canvas ───
+const yammyImg = ref(null)
+const yammyPausedSrc = ref('')
+
+function pauseYammyGif() {
+    const img = yammyImg.value
+    if (!img || !img.complete) return
+    try {
+        const c = document.createElement('canvas')
+        c.width = img.naturalWidth
+        c.height = img.naturalHeight
+        c.getContext('2d').drawImage(img, 0, 0)
+        yammyPausedSrc.value = c.toDataURL()
+        img.src = yammyPausedSrc.value
+    } catch {}
+}
+
+function playYammyGif() {
+    const img = yammyImg.value
+    if (!img) return
+    img.src = '/yammy.gif?t=' + Date.now()
+    yammyPausedSrc.value = ''
+}
+
+watch(() => props.yammyPlaying, (playing) => {
+    nextTick(() => {
+        if (playing) {
+            playYammyGif()
+        } else {
+            pauseYammyGif()
+        }
+    })
+})
+
+watch(() => props.yammyActive, (active) => {
+    if (active) {
+        nextTick(() => {
+            const img = yammyImg.value
+            if (img) {
+                img.src = '/yammy.gif?t=' + Date.now()
+                if (props.yammyPlaying) {
+                    // playing — let it animate
+                } else {
+                    const onLoad = () => { img.removeEventListener('load', onLoad); nextTick(() => pauseYammyGif()) }
+                    if (img.complete) pauseYammyGif()
+                    else img.addEventListener('load', onLoad)
+                }
+            }
+        })
+    }
 })
 
 const renderedText = computed(() => {
@@ -419,8 +479,7 @@ async function copyText() {
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
 /* ─── message actions ─── */
-.msg-actions { display: flex; gap: 3px; margin-top: 3px; opacity: 0; transition: opacity 0.12s; }
-.msg.user .msg-actions { justify-content: flex-end; }
+.msg-actions { display: flex; gap: 3px; opacity: 0; transition: opacity 0.12s; }
 .body:hover .msg-actions { opacity: 1; }
 .msg-actions button {
     height: 24px; border-radius: var(--radius-full); padding: 0 8px; font-size: 11px;

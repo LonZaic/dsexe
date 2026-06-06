@@ -24,6 +24,10 @@
                         @next-branch="store.switchBranch(item.parent_id, 'next')"
                         @pick-device="onPickDevice(item, $event)"
                         @not-design="onNotDesign(item)"
+                        :yammy-active="item.role === 'ai' && item.id === yammy.msgId"
+                        :yammy-playing="yammy.playing"
+                        :yammy-shaking="yammy.shaking"
+                        @yammy-click="onYammyClick"
                     />
                 </template>
             </VirtualList>
@@ -80,11 +84,12 @@
                 :tabs="codePanelTabs"
                 @close="codePanelVisible = false"
             />
+
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '../store/chatStore.js'
 import { useDebounce } from '../composables/useDebounce.js'
@@ -170,6 +175,15 @@ const agentTimerNow = ref(0)
 const tokPrompt = ref(0); const tokComp = ref(0); const tokTotal = ref(0)
 const balance = ref(null)
 const chatModel = ref(localStorage.getItem('chat_model') || 'deepseek-v4-pro')
+
+// Yammy mascot — right side of AI reply bottom row
+const yammy = reactive({
+  msgId: null,
+  playing: false,
+  clickCount: 0,
+  shaking: false,
+  _playTimer: null,
+})
 let agentTimerInterval = null
 
 // ═══ TokenBar persistence — save/restore token counts per conversation ═══
@@ -972,6 +986,14 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
     const abortCtrl = new AbortController()
     store.setAbortController(abortCtrl, convId)
 
+    // Yammy — follow the new AI reply
+    if (!isDesign) {
+        yammy.msgId = tempId
+        yammy.playing = true
+        yammy.clickCount = 0
+        yammy.shaking = false
+    }
+
     if (isDesign) {
         store.updateStreamCleanText(tempId, '思考中...')
         store.appendStreamDesignProgress(tempId, 10)
@@ -1197,19 +1219,39 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             }
         }
 
-        await store.finishStreamReply(tempId)
+        yammy.playing = false
+        const realId = await store.finishStreamReply(tempId)
+        if (realId) yammy.msgId = realId
     } catch (e) {
+        yammy.playing = false
         if (e.name === 'AbortError') {
             store.updateStreamCleanText(tempId, '<span style="color:var(--red)">[!] 任务中断</span>')
-            await store.finishStreamReply(tempId)
+            const realId = await store.finishStreamReply(tempId)
+            if (realId) yammy.msgId = realId
         } else {
             store.updateStreamCleanText(tempId, '请求失败: ' + e.message)
-            await store.finishStreamReply(tempId)
+            const realId = await store.finishStreamReply(tempId)
+            if (realId) yammy.msgId = realId
         }
     } finally {
         store.setLoading(false, convId)
         store.setAbortController(null, convId)
     }
+}
+
+// Yammy click — brief play then auto-pause; 10th click triggers angry shake
+function onYammyClick() {
+    if (!yammy.msgId) return
+    yammy.clickCount++
+    if (yammy.clickCount >= 10) {
+        yammy.shaking = true
+        yammy.clickCount = 0
+        setTimeout(() => { yammy.shaking = false }, 600)
+    }
+    // Each click: play for ~1.8s then auto-pause
+    yammy.playing = true
+    clearTimeout(yammy._playTimer)
+    yammy._playTimer = setTimeout(() => { yammy.playing = false }, 1800)
 }
 
 function stopGeneration() {
