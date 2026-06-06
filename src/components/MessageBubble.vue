@@ -128,6 +128,13 @@
                         </button>
                     </div>
                     <p class="device-pick-hint">{{ t('selectDevice') }}</p>
+                    <button class="device-pick-undo" @click="$emit('notDesign')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <path d="M3 5v5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        不是设计
+                    </button>
                 </div>
             </template>
 
@@ -212,7 +219,7 @@ const props = defineProps({
     designSummary: { type: String, default: '' },
 })
 
-defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice'])
+defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign'])
 
 async function previewFile(f) {
     if (f.type?.startsWith('image/')) {
@@ -553,4 +560,13 @@ async function copyText() {
 .device-pick-name { font-weight: 400; }
 .device-pick-size { font-size: 10px; color: var(--text3); }
 .device-pick-hint { font-size: 11px; color: var(--text3); margin-top: 8px; margin-bottom: 0; }
+.device-pick-undo {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 10px; padding: 4px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: transparent; color: var(--text3);
+    font-size: 12px; font-family: inherit; cursor: pointer;
+    transition: all .15s;
+}
+.device-pick-undo:hover { border-color: var(--red); color: var(--red); }
 </style>

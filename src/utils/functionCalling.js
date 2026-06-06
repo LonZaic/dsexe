@@ -64,7 +64,7 @@ function getDesignTool() {
         type: 'function',
         function: {
             name: 'request_design_preview',
-            description: '当用户要求你设计或创建任何网页/UI界面时（无论简单还是复杂），必须立即调用此函数让用户选择目标设备。调用后请停止生成，等待用户选择设备。绝对不要直接输出HTML、CSS、JS代码。不要用"当然可以，我来帮你设计"这类话替代函数调用。',
+            description: '仅当用户要求设计网页/UI界面/HTML页面/前端组件时调用，让用户选择目标设备。调用后停止生成，等待用户选择设备。注意：架构图、流程图、Mermaid图、SVG图表、数据可视化、时序图——这些不属于UI设计，应直接输出代码块，不要调用此函数。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -89,7 +89,7 @@ function getClassifyTool() {
                     intent: {
                         type: 'string',
                         enum: ['design', 'chat'],
-                        description: 'design=用户要求设计网页/UI/界面/组件/布局/页面; chat=普通对话/问答/代码/闲聊'
+                        description: 'design=用户要求设计网页/UI界面/HTML页面/前端组件/布局; chat=普通对话/问答/代码/闲聊/架构图/流程图/Mermaid/SVG图表'
                     },
                     summary: {
                         type: 'string',
@@ -106,7 +106,7 @@ function getClassifyTool() {
 async function classifyIntent(userText, apikey, contextMsgs = []) {
     // Build messages: system + recent context (max 4) + current user msg
     const messages = [
-        { role: 'system', content: '严格判断用户意图。只有用户明确要求"设计网页/UI界面/做页面/画组件/创建前端"才返回design。天气、搜索、问答、编程、聊天等一律返回chat。不确定就返回chat。' },
+        { role: 'system', content: '严格判断用户意图。只有用户明确要求"设计网页/UI界面/做页面/画组件/创建前端/写HTML页面"才返回design。注意：画架构图、流程图、时序图、类图、Mermaid图、SVG图表、数据可视化、代码结构图 —— 这些一律返回chat，不是design。不确定就返回chat。' },
     ]
     const recent = contextMsgs.slice(-4)
     for (const m of recent) {

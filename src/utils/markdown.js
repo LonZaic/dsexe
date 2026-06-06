@@ -9,7 +9,16 @@ marked.use({
             // Mermaid diagram
             if (lang === 'mermaid') {
                 const id = 'm_' + Math.random().toString(36).slice(2, 8)
-                return `<div class="mermaid-wrap"><pre class="mermaid" id="${id}">${escapeHtml(text)}</pre></div>\n`
+                return `<div class="mermaid-wrap mermaid-loading" data-mermaid-state="loading">
+  <div class="mermaid-toolbar">
+    <span class="mermaid-status">绘制中...</span>
+    <div class="mermaid-actions">
+      <button class="mermaid-btn mermaid-dl" title="下载 SVG"></button>
+      <button class="mermaid-btn mermaid-full" title="放大查看"></button>
+    </div>
+  </div>
+  <div class="mermaid-body"><pre class="mermaid" id="${id}">${escapeHtml(text)}</pre></div>
+</div>\n`
             }
             // SVG chart — render inline directly
             if (lang === 'svg' || lang === 'svg-chart') {

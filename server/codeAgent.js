@@ -361,7 +361,10 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
 2. 先读文件了解项目，再分析
 3. 用户问什么答什么，不过度扩展
 4. 只读不写，不要修改代码
-5. 不确定的事情用 web_search 查了再说`
+5. 不确定的事情用 web_search 查了再说
+
+## 分析评价规则
+当用户要求评价项目前景、代码质量、架构设计、技术选型时，你必须基于实际代码内容给出技术分析。包括：代码结构、技术栈评估、架构优缺点、改进建议。禁止以"无法评估"、"超出能力范围"或"主观问题不便回答"等理由拒绝——你的技术判断对用户有参考价值，认真读代码然后给出你的分析。`
 
     userPrompt = `## 用户请求\n${task}\n\n如果要画图，直接输出 svg 或 mermaid 代码块。如果是了解项目，读文件后输出分析。必须有可见输出。`
   } else {
@@ -786,6 +789,7 @@ function buildCodeSystemPrompt(projectPath, followContent, tasks) {
 8. 用户请求做不到 → 直接说明，给替代方案
 9. 任务按顺序执行，完成一步再做下一步
 10. 所有步骤完成后才能结束
+11. 当用户要求分析/评价项目时，基于实际代码给技术评估，禁止以"无法评估"等理由拒绝
 
 ## 项目记忆 (Follow.md)
 ${followContent.slice(0, 1500)}

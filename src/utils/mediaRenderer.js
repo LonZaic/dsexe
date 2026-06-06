@@ -1,7 +1,7 @@
 // ══════════════════════════════════════
 // Media renderer — SVG + Mermaid inline rendering
 // Works across chat & code modes
-// Strategy: render immediately, observe for streaming additions
+// Mermaid: loading placeholder -> rendered with toolbar (download / expand)
 // ══════════════════════════════════════
 
 let _observer = null
@@ -35,7 +35,6 @@ export function renderSvgBlock(wrap) {
     wrap.setAttribute('data-rendered', 'empty')
     return
   }
-  // Clean: extract <svg>...</svg> if wrapped in markdown artifacts
   let svg = raw.trim()
   const m = svg.match(/<svg[\s\S]*?<\/svg>/i)
   if (m) svg = m[0]
@@ -55,7 +54,6 @@ export function renderSvgBlock(wrap) {
 export async function renderMermaidBlock(el) {
   if (!el || el.hasAttribute('data-processed')) return
   if (!ensureMermaid()) {
-    // Retry later when CDN loads
     el.setAttribute('data-processed', 'waiting')
     return
   }
@@ -64,13 +62,32 @@ export async function renderMermaidBlock(el) {
     el.setAttribute('data-processed', 'empty')
     return
   }
+
+  // Find the wrapper
+  const wrap = el.closest('.mermaid-wrap')
+  if (!wrap) return
+
   try {
     const id = 'm_' + Math.random().toString(36).slice(2, 8)
     const { svg } = await window.mermaid.render(id + '_svg', code)
-    el.innerHTML = svg
+
+    // Replace body content with rendered SVG
+    const body = wrap.querySelector('.mermaid-body')
+    if (body) {
+      body.innerHTML = svg
+    }
+
+    // Update status text
+    const status = wrap.querySelector('.mermaid-status')
+    if (status) status.textContent = 'Mermaid'
+
+    // Switch state from loading to rendered
+    wrap.classList.remove('mermaid-loading')
+    wrap.setAttribute('data-mermaid-state', 'rendered')
     el.setAttribute('data-processed', 'true')
   } catch (e) {
-    // Show error as plain code so user can see what went wrong
+    wrap.classList.remove('mermaid-loading')
+    wrap.setAttribute('data-mermaid-state', 'error')
     el.setAttribute('data-processed', 'error')
     el.classList.add('mermaid-error')
     el.innerHTML = '<code>' + escapeHtml(code.slice(0, 500)) + '</code>'
@@ -96,14 +113,78 @@ export function renderAll() {
   }
 }
 
+// ─── Event delegation for mermaid toolbar buttons ───
+// (Vue v-html strips inline onclick, so we use document-level delegation)
+let _mermaidDelegationInstalled = false
+function installMermaidDelegation() {
+  if (_mermaidDelegationInstalled || typeof document === 'undefined') return
+  _mermaidDelegationInstalled = true
+
+  document.addEventListener('click', function(e) {
+    // Download button
+    const dlBtn = e.target.closest('.mermaid-dl')
+    if (dlBtn) {
+      e.stopPropagation()
+      const wrap = dlBtn.closest('.mermaid-wrap')
+      if (!wrap) return
+      const svg = wrap.querySelector('.mermaid-body svg')
+      if (!svg) return
+      const clone = svg.cloneNode(true)
+      const data = new XMLSerializer().serializeToString(clone)
+      const blob = new Blob([data], { type: 'image/svg+xml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'diagram.svg'
+      a.click()
+      URL.revokeObjectURL(url)
+      return
+    }
+
+    // Expand button
+    const fullBtn = e.target.closest('.mermaid-full')
+    if (fullBtn) {
+      e.stopPropagation()
+      const wrap = fullBtn.closest('.mermaid-wrap')
+      if (!wrap) return
+      const svg = wrap.querySelector('.mermaid-body svg')
+      if (!svg) return
+
+      const existing = document.querySelector('.mermaid-overlay')
+      if (existing) existing.remove()
+
+      const clone = svg.cloneNode(true)
+      const overlay = document.createElement('div')
+      overlay.className = 'mermaid-overlay'
+      overlay.innerHTML = '<div class="mermaid-overlay-close" title="关闭"></div>'
+      const inner = document.createElement('div')
+      inner.className = 'mermaid-overlay-inner'
+      inner.appendChild(clone)
+      overlay.appendChild(inner)
+
+      overlay.addEventListener('click', function(ev) {
+        if (ev.target === overlay || ev.target.classList.contains('mermaid-overlay-close')) {
+          overlay.remove()
+        }
+      })
+      const onKey = function(ev) {
+        if (ev.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey) }
+      }
+      document.addEventListener('keydown', onKey)
+
+      document.body.appendChild(overlay)
+    }
+  })
+}
+
 // ─── MutationObserver — catch streaming content ───
 export function startMediaObserver() {
   if (typeof window === 'undefined' || _observer) return
 
   ensureMermaid()
+  installMermaidDelegation()
 
   _observer = new MutationObserver(() => {
-    // Just scan everything — cheap enough with querySelector
     requestAnimationFrame(() => renderAll())
   })
 
@@ -111,13 +192,14 @@ export function startMediaObserver() {
   const start = () => {
     if (!document.body) { setTimeout(start, 50); return }
     _observer.observe(document.body, { childList: true, subtree: true })
-    renderAll() // initial scan
+    renderAll()
   }
   start()
 }
 
 // Auto-start
 if (typeof window !== 'undefined') {
+  installMermaidDelegation()
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => startMediaObserver())
   } else {
