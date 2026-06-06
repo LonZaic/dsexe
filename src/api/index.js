@@ -264,7 +264,7 @@ export const conversations = {
 }
 
 export function isLoggedIn() {
-  return !!getToken()
+  return !!getToken() || !!(localStorage.getItem('apikey'))
 }
 
 export function logout() {

@@ -415,6 +415,27 @@ const codeModel = ref(localStorage.getItem('code_model') || 'deepseek-v4-pro')
 const showModelMenu = ref(false)
 let _isCreatingProject = false
 
+// ═══ TokenBar persistence ═══
+const TOKEN_KEY = 'ds_code_tokens'
+function saveCodeTokens() {
+  try {
+    localStorage.setItem(TOKEN_KEY, JSON.stringify({
+      prompt: tokPrompt.value, comp: tokComp.value, total: tokTotal.value, ts: Date.now()
+    }))
+  } catch {}
+}
+function loadCodeTokens() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null')
+    if (saved) {
+      tokPrompt.value = saved.prompt || 0
+      tokComp.value = saved.comp || 0
+      tokTotal.value = saved.total || 0
+    }
+  } catch {}
+}
+watch([tokPrompt, tokComp, tokTotal], () => { saveCodeTokens() })
+
 function pickModel(m) {
   codeModel.value = m
   showModelMenu.value = false
@@ -737,6 +758,7 @@ async function fetchBalance() {
 onMounted(() => {
   store.restoreSession()
   if (store.projectPath) loadProject(store.projectPath)
+  loadCodeTokens()  // restore persisted token counters
   fetchBalance()
   nextTick(() => { scrollDown() })
 })
@@ -967,12 +989,44 @@ async function send() {
   const _dbInterval = setInterval(_saveToDb, 5000)
 
   try {
+    // ═══ Pre-crawl URLs in user message ═══
+    let taskTxt = txt
+    const userUrls = (txt || '').match(/(https?:\/\/[^\s]+)/g) || []
+    if (userUrls.length > 0) {
+        try {
+            const crawlResults = []
+            for (const u of userUrls) {
+                try {
+                    const isCodeHost = /github\.com|gitee\.com|gitlab\.com/i.test(u)
+                    const endpoint = isCodeHost ? '/api/search/deep-crawl' : '/api/search/direct-crawl'
+                    const crawlRes = await fetch(`${BASE_URL}${endpoint}`, {
+                        method: 'POST',
+                        headers: getApiHeaders({}),
+                        body: JSON.stringify({ url: u })
+                    })
+                    const crawlData = await crawlRes.json()
+                    if (crawlData.text && crawlData.text.length > 20) {
+                        crawlResults.push(crawlData.text)
+                    }
+                } catch {}
+            }
+            if (crawlResults.length > 0) {
+                const MAX_INJECT = 120000
+                let injectText = crawlResults.join('\n\n---\n\n')
+                if (injectText.length > MAX_INJECT) {
+                    injectText = injectText.slice(0, MAX_INJECT) + '\n\n[... 余下内容已截断，需要具体文件内容请直接询问]'
+                }
+                taskTxt = `[已爬取网页内容，优先参考]\n${injectText}\n\n---\n用户任务:\n${txt}`
+            }
+        } catch {}
+    }
+
     // Only reuse plan if there are PENDING tasks. All-done → fresh plan.
     const pendingCount = (store.tasks || []).filter(t => !t.done).length
     const existingPlan = pendingCount > 0
       ? store.tasks.map(t => ({ id: t.id, text: t.text, done: !!t.done }))
       : null
-    await runCodeAgent(txt, store.projectPath, codeModel.value, async (event) => {
+    await runCodeAgent(taskTxt, store.projectPath, codeModel.value, async (event) => {
       const e = event
       aiMsg._events.push(e)
       _saveDirty = true

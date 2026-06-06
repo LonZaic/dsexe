@@ -46,7 +46,7 @@ const BASE_TOOLS = [
   // ─── New tools ───
   { type: 'function', function: { name: 'write_todos', description: 'Write/update task tracking list. Use to track progress on complex multi-step work. Each item has id, text, status (pending/in_progress/completed).', parameters: { type: 'object', properties: { todos: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, text: { type: 'string' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['id', 'text', 'status'] } } }, required: ['todos'] } } },
   { type: 'function', function: { name: 'task', description: 'Launch a sub-agent to handle a specific sub-task in parallel. Use for independent work that can run concurrently.', parameters: { type: 'object', properties: { description: { type: 'string' }, prompt: { type: 'string' } }, required: ['description', 'prompt'] } } },
-  { type: 'function', function: { name: 'web_search', description: 'Search the web using DuckDuckGo. Use for looking up current information, documentation, or anything you are unsure about.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Search query' } }, required: ['query'] } } },
+  { type: 'function', function: { name: 'web_search', description: 'Search the web or crawl URLs directly. Pass a URL to fetch its content (deep-crawl for GitHub/Gitee repos with full file tree). Pass a search query for Bing+Sogou results. Use for documentation, API references, or anything you are unsure about.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Search query or URL to crawl' } }, required: ['query'] } } },
 ]
 
 // MCP tools cache (loaded lazily)
@@ -113,6 +113,25 @@ async function executeTool(name, args, projectRoot) {
         return execSync(args.command, { cwd: root, timeout: 30000, encoding: 'utf-8', shell: true }).trim() || '(ok)'
       }
       case 'web_search': {
+        // ─── If query contains URLs, crawl them directly first ───
+        const queryUrls = args.query.match(/(https?:\/\/[^\s]+)/g)
+        if (queryUrls && queryUrls.length > 0) {
+          const { crawlUrlDeep, crawlPage } = require('./crawler')
+          const crawlResults = []
+          for (const u of queryUrls) {
+            try {
+              const isCodeHost = /github\.com|gitee\.com|gitlab\.com/i.test(u)
+              const result = isCodeHost ? await crawlUrlDeep(u) : await crawlPage(u)
+              if (result && result.content && result.content.length > 20) {
+                crawlResults.push(result.content)
+              }
+            } catch {}
+          }
+          if (crawlResults.length > 0) {
+            return '[直接抓取]\n' + crawlResults.join('\n\n---\n\n')
+          }
+        }
+        // ─── Normal web search with verified pipeline ───
         const dualResult = await webSearchDual(args.query, 5)
         if (dualResult && dualResult.length > 20) return dualResult
         const results = await webSearch(args.query, 5)

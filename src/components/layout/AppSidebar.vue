@@ -243,18 +243,20 @@ const userName = computed(() => { try { return JSON.parse(localStorage.getItem('
 
 const displayConvs = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
+  // Don't show conversation history when not logged in
+  const hideHistory = !loggedIn.value
   if (isCodeRoute.value) {
     const list = codeStore.conversations || []
-    if (!q) return list
-    return list.filter(c => (c.title || '').toLowerCase().includes(q))
+    if (!q) return hideHistory ? [] : list
+    return hideHistory ? [] : list.filter(c => (c.title || '').toLowerCase().includes(q))
   }
   if (isAgentRoute.value) {
     const list = agStore.conversations || []
-    if (!q) return list
-    return list.filter(c => (c.title || '').toLowerCase().includes(q))
+    if (!q) return hideHistory ? [] : list
+    return hideHistory ? [] : list.filter(c => (c.title || '').toLowerCase().includes(q))
   }
-  if (!q) return store.conversations || []
-  return (store.conversations || []).filter(c => (c.title || '').toLowerCase().includes(q))
+  if (!q) return hideHistory ? [] : (store.conversations || [])
+  return hideHistory ? [] : (store.conversations || []).filter(c => (c.title || '').toLowerCase().includes(q))
 })
 
 const emptyText = computed(() => {
@@ -341,7 +343,7 @@ function confirmDelete(conv) {
   deleting.value = { id: conv.id, title: conv.title || '新对话' }
 }
 function cancelDelete() { deleting.value = null }
-function doDelete() {
+async function doDelete() {
   if (!deleting.value) return
   const id = deleting.value.id
   if (isCodeRoute.value) {
@@ -352,10 +354,10 @@ function doDelete() {
     router.push('/agent')
   } else {
     const wasCurrent = store.currentId === id
-    store.deleteConv(id)
+    await store.deleteConv(id)
     if (wasCurrent) {
       if (store.openTabs.length) { router.push('/chat/' + store.openTabs[0]) }
-      else router.push('/')
+      else { router.push('/'); store.currentId = null }
     }
   }
   deleting.value = null

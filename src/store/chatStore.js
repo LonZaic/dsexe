@@ -215,6 +215,17 @@ export const useChatStore = defineStore('chat', {
         },
 
         async loadMessages(id) {
+            // Guard: never overwrite messages that were already loaded/created
+            const existing = this.messagesMap[id]
+            if (existing && existing.length > 0) {
+                // Already have messages — just ensure tab is open
+                this.currentId = id
+                if (!this.openTabs.includes(id)) {
+                    this.openTabs.push(id)
+                }
+                this._saveSession()
+                return
+            }
             if (this._useServerApi()) {
                 try {
                     const result = await convApi.get(id)

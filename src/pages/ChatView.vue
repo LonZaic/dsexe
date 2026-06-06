@@ -171,6 +171,32 @@ const balance = ref(null)
 const chatModel = ref(localStorage.getItem('chat_model') || 'deepseek-v4-pro')
 let agentTimerInterval = null
 
+// ═══ TokenBar persistence — save/restore token counts per conversation ═══
+const TOKEN_STORAGE_KEY = 'ds_token_usage'
+function saveTokenState() {
+  const cid = store.currentId
+  if (!cid) return
+  try {
+    const all = JSON.parse(localStorage.getItem(TOKEN_STORAGE_KEY) || '{}')
+    all[cid] = { prompt: tokPrompt.value, comp: tokComp.value, total: tokTotal.value, ts: Date.now() }
+    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(all))
+  } catch {}
+}
+function loadTokenState(cid) {
+  if (!cid) return
+  try {
+    const all = JSON.parse(localStorage.getItem(TOKEN_STORAGE_KEY) || '{}')
+    const saved = all[cid]
+    if (saved) {
+      tokPrompt.value = saved.prompt || 0
+      tokComp.value = saved.comp || 0
+      tokTotal.value = saved.total || 0
+    }
+  } catch {}
+}
+// Auto-save token state whenever values change
+watch([tokPrompt, tokComp, tokTotal], () => { saveTokenState() }, { deep: false })
+
 // ─── tab colors: rainbow cycle ───
 const TAB_COLORS = ['#e03131', '#e8590c', '#f08c00', '#2f9e44', '#1971c2', '#7048e8', '#c2255c']
 function tabColor(index) {
@@ -220,8 +246,16 @@ async function fetchBalance() {
 }
 
 onMounted(async () => {
+    // Auto-trigger AI reply for conversations started from homepage
+    // This MUST run first — before any other init that might clear the pending flag
+    const pendingAutoReply = store._pendingAutoReply && store._pendingAutoReply === store.currentId
+    if (pendingAutoReply) {
+        delete store._pendingAutoReply
+    }
+
     // Only init if HomeView hasn't already restored state for this conversation
-    const alreadyLoaded = store.messagesMap[route.params.id] && store.messagesMap[route.params.id].length > 0
+    const effectiveId = route.params.id || store.currentId
+    const alreadyLoaded = effectiveId && store.messagesMap[effectiveId] && store.messagesMap[effectiveId].length > 0
 
     if (!alreadyLoaded) {
         store.loadApiKey()
@@ -231,13 +265,14 @@ onMounted(async () => {
     if (route.params.id) {
         // switchTab is a no-op if currentId already matches
         store.switchTab(route.params.id)
+    } else if (store.currentId && !store.messagesMap[store.currentId]) {
+        // ChatView rendered without route param (e.g. quickStart before router.push completes)
+        store.switchTab(store.currentId)
     }
 
     fetchBalance()
 
-    // Auto-trigger AI reply for conversations started from homepage
-    if (store._pendingAutoReply && store._pendingAutoReply === store.currentId) {
-        delete store._pendingAutoReply
+    if (pendingAutoReply) {
         nextTick(() => {
             const msgs = store.messagesMap[store.currentId] || []
             const lastMsg = msgs[msgs.length - 1]
@@ -249,12 +284,25 @@ onMounted(async () => {
     initEmailScheduler()
 })
 
-watch(() => route.params.id, (newId) => {
+watch(() => route.params.id, (newId, oldId) => {
     if (newId && newId !== store.currentId) {
+        saveTokenState()  // save current conversation tokens before switching
         store.switchTab(newId)
-        // Reset token counters for new conversation
+        // Load saved token counters for the target conversation
         tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0
+        loadTokenState(newId)
         fetchBalance()
+    }
+    // Handle pending auto-reply from HomeView quickStart (flag set after addUserMessage)
+    if (newId && store._pendingAutoReply === newId) {
+        delete store._pendingAutoReply
+        nextTick(() => {
+            const msgs = store.messagesMap[newId] || []
+            const lastMsg = msgs[msgs.length - 1]
+            if (lastMsg && lastMsg.role === 'user') {
+                callStreamAPI()
+            }
+        })
     }
 })
 
@@ -748,7 +796,7 @@ function buildMessages(tempId) {
 
 ## 核心原则
 - **正事认真，闲事高效。** 用户问的是正经需求（技术问题、决策参考、学习理解），你必须详细、准确、对小白友好。闲聊可以简洁冷漠。
-- **不确定就去搜，绝不瞎编。** 任何你不确定的事实——搜索确认后再回答。
+- **不确定就去搜，绝不瞎编。** 任何你不确定的事实——**必须调用 web_search 工具搜索确认后再回答**。禁止在 content 中说'让我搜索'、'换个角度查'这类话却不调工具——说搜就必须真搜。
 - **错了就认，对事不对人。**
 
 ## 输出格式（严格遵守）
@@ -767,6 +815,7 @@ function buildMessages(tempId) {
 
     // Web search — always available
     sysContent += '\n\n## 联网搜索\n有 web_search(query) 工具（Bing搜索+深度爬虫组合模式）。搜索结果包含Bing摘要和深度抓取的页面正文内容，你必须**彻底消化后用自然语言重新讲出来**——就像这些知识本来就在你脑子里一样。**严禁照搬搜索条目列表、严禁用任何尖括号标签包裹内容。** 搜到不相关的就换关键词再搜。'
+    sysContent += '\n\n## 网页抓取\n有 web_fetch(url) 工具。**当用户在消息中提供了任何 URL（GitHub、Gitee、博客、文档等），你必须立即调用 web_fetch(url) 抓取内容。** 对 GitHub/Gitee 仓库会返回完整文件树和所有文件代码。抓取到内容后，基于内容直接回答用户问题。如果用户问的是仓库里具体某个文件，调用 web_fetch 时把文件路径拼进 URL。'
 
     const msgs = [{ role: 'system', content: sysContent }]
     for (const m of prevMsgs) {
@@ -928,17 +977,68 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
 
     try {
         const msgs = buildMessages(tempId)
+
+        // ═══ Pre-crawl URLs in user message (before AI even sees it) ═══
+        // Crawls ALL URLs in the user's message — deep-crawl for repos, direct for pages
+        const userMsgs = (store.messagesMap[convId] || []).filter(m => m.role === 'user')
+        const lastUserMsg = userMsgs[userMsgs.length - 1]
+        const userUrls = (lastUserMsg?.text || '').match(/(https?:\/\/[^\s]+)/g) || []
+        let preCrawlText = ''
+        if (userUrls.length > 0 && !isDesign) {
+            try {
+                const crawlResults = []
+                for (const u of userUrls) {
+                    try {
+                        const isCodeHost = /github\.com|gitee\.com|gitlab\.com/i.test(u)
+                        const endpoint = isCodeHost ? '/api/search/deep-crawl' : '/api/search/direct-crawl'
+                        const crawlRes = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: getApiHeaders({}),
+                            body: JSON.stringify({ url: u })
+                        })
+                        const crawlData = await crawlRes.json()
+                        if (crawlData.text && crawlData.text.length > 20) {
+                            crawlResults.push(crawlData.text)
+                        }
+                    } catch {}
+                }
+                if (crawlResults.length > 0) {
+                    // Limit injection to avoid overwhelming the model — file tree + README + key configs come first
+                    const MAX_INJECT = 120000
+                    let injectText = crawlResults.join('\n\n---\n\n')
+                    if (injectText.length > MAX_INJECT) {
+                        injectText = injectText.slice(0, MAX_INJECT) + '\n\n[... 余下内容已截断，需要具体文件内容请直接询问]'
+                    }
+                    preCrawlText = injectText
+                    msgs[0].content = `[已爬取网页内容，优先参考回答]\n${preCrawlText}\n\n---\n${msgs[0].content}`
+                }
+            } catch {}
+        }
+
         const { tools, executors } = skipEmail ? { tools: [], executors: {} } : getEmailTools()
-        // Web search always ON — 不确定就搜
+        // Web search — 不确定就搜
         const webSearchTool = [{
             type: 'function',
             function: {
                 name: 'web_search',
-                description: 'Search the web using Bing + advanced crawler. Returns deep-crawled page content alongside search snippets. For weather/forecast queries, use get_weather instead.',
+                description: 'Search the web using Bing+Sogou+Official sources. Use for looking up facts, news, or information you are unsure about.',
                 parameters: {
                     type: 'object',
                     properties: { query: { type: 'string', description: 'Search query' } },
                     required: ['query']
+                }
+            }
+        }]
+        // Web fetch — 用户给网址时直接抓取
+        const webFetchTool = [{
+            type: 'function',
+            function: {
+                name: 'web_fetch',
+                description: 'Fetch a URL directly. For GitHub/Gitee repos, gets the FULL file tree with file contents from ALL branches. For regular pages, extracts the article text. Use this when the user provides any URL or asks about a specific webpage/repo.',
+                parameters: {
+                    type: 'object',
+                    properties: { url: { type: 'string', description: 'The URL to fetch (e.g. https://github.com/user/repo)' } },
+                    required: ['url']
                 }
             }
         }]
@@ -959,7 +1059,7 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             }
         }]
         // No design tool in normal chat — classifyIntent() pre-checks design intent before this
-        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool]
+        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool]
 
         const dw = device?.w || 375
         const dh = device?.h || 667
@@ -1002,6 +1102,8 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
             let toolResult = null
             if (activeToolCall.function.name === 'web_search') {
                 toolResult = await handleWebSearch(args.query)
+            } else if (activeToolCall.function.name === 'web_fetch') {
+                toolResult = await handleWebFetch(args.url)
             } else if (activeToolCall.function.name === 'get_weather') {
                 toolResult = await handleGetWeather(args)
             } else if (executors[activeToolCall.function.name]) {
@@ -1017,14 +1119,66 @@ async function callStreamAPI(files = [], skipEmail = false, isDesign = false, de
                 store.appendStreamReasoning(tempId, first.reasoning)
                 const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl)
                 finalText = second.text
-                // 如果第二次调用没有产生有效输出，直接用搜索结果作为回答
-                if (!finalText || finalText.length < 5) {
-                    console.warn('[tool] second call returned empty, using raw results as fallback')
-                    const fallback = '搜索结果如下：\n\n' + toolResult
-                    store.updateStreamCleanText(tempId, fallback)
-                    finalText = fallback
+                // DeepSeek reasoning 模型偶发 content 为空 → 用非流式重试
+                if (!finalText || finalText.length < 20) {
+                    console.warn('[tool] second stream empty, retrying non-streaming...')
+                    try {
+                        const retryBody = {
+                            model: 'deepseek-chat',
+                            messages: [
+                                { role: 'system', content: '基于以下搜索结果，用自然语言中文直接回答用户问题。该用表格用表格，该画图画图。不要输出搜索条目列表。' },
+                                { role: 'user', content: '问题：' + (msgs.find(m => m.role === 'user')?.content || '') + '\n\n搜索结果：\n' + toolResult }
+                            ],
+                            stream: false,
+                            max_tokens: 2000
+                        }
+                        const retryRes = await fetch('/api/ai/chat', {
+                            method: 'POST',
+                            headers: getApiHeaders(),
+                            body: JSON.stringify(retryBody)
+                        })
+                        const retryData = await retryRes.json()
+                        const retryText = retryData?.reply || retryData?.data?.reply || ''
+                        if (retryText && retryText.length > 10) {
+                            store.updateStreamCleanText(tempId, retryText)
+                            finalText = retryText
+                        }
+                    } catch (e) {
+                        console.warn('[tool] retry failed:', e.message)
+                    }
                 }
             }
+        } else {
+            const fakeType = detectFakeSearch(first.text || '')
+            if (fakeType) {
+            // ═══ Fake Search / Missing Tool Call Detection ═══
+            console.log('[fake-search] Detected! type=' + fakeType + ' Auto-executing...')
+            const autoQuery = extractSearchQuery() || finalText.slice(0, 200)
+            if (autoQuery) {
+                // If user provided URL, use web_fetch; otherwise web_search
+                const urlsInMsg = autoQuery.match(/(https?:\/\/[^\s]+)/g)
+                const isUrlFetch = fakeType === 'url' && urlsInMsg && urlsInMsg.length > 0
+                const toolName = isUrlFetch ? 'web_fetch' : 'web_search'
+                const toolResult = isUrlFetch
+                    ? await handleWebFetch(urlsInMsg[0])
+                    : await handleWebSearch(autoQuery)
+                if (toolResult && !toolResult.startsWith('Search failed') && !toolResult.startsWith('抓取失败') && !toolResult.startsWith('无效的')) {
+                    msgs.push({ role: 'assistant', content: first.text || null })
+                    msgs.push({ role: 'tool', tool_call_id: 'auto_fake_' + Date.now(), name: toolName, content: toolResult })
+                    msgs.push({ role: 'user', content: '以上是获取的内容。请基于这些真实信息，用自然语言直接回答用户。禁止说你搜索了——直接给出答案。做表格就做表格，该画图就画图。不确定的地方明确标注。' })
+                    store.updateStreamCleanText(tempId, '')
+                    store.appendStreamText(tempId, isUrlFetch ? '正在抓取网页内容...' : '正在搜索真实信息...')
+                    store.appendStreamReasoning(tempId, first.reasoning)
+                    const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl)
+                    finalText = second.text
+                    if (!finalText || finalText.length < 5) {
+                        const fallback = (isUrlFetch ? '网页内容如下：\n\n' : '搜索结果如下：\n\n') + toolResult
+                        store.updateStreamCleanText(tempId, fallback)
+                        finalText = fallback
+                    }
+                }
+            }
+        }
         }
 
         // 通用兜底：如果最终文字为空，尝试从 reasoning 或工具结果中提取
@@ -1201,8 +1355,136 @@ function onDeleteMessage(item) {
     }
 }
 
+// ─── Fake search detection ───
+// Detects when AI says it will search but doesn't actually call the tool
+function detectFakeSearch(text) {
+    if (!text) return null
+    // If user provided a URL, AI MUST call web_fetch — don't let it skip
+    const msgs = store.visibleMessages || []
+    const lastUser = [...msgs].reverse().find(m => m.role === 'user')
+    if (lastUser && /https?:\/\//.test(lastUser.text || '')) {
+        return 'url' // signals to use web_fetch, not web_search
+    }
+    const searchIntentPatterns = [
+        /(?:让|帮|给|替)\s*我\s*(?:搜|查|检索|搜索|查找|找找|搜搜|查查)/,
+        /(?:我|先|再|去|来)\s*(?:搜|查|检索|搜索|查找)\s*(?:一下|一下下|看看|下)/,
+        /(?:换|用|以|从)\s*(?:个|一种|别的|其他|另外|不同)\s*(?:角度|方式|方法|关键词|关键词汇|说法|问法|查询|方向)\s*(?:搜|查|检索|搜索)/,
+        /(?:再|重新|再次|又)\s*(?:搜|查|检索|搜索)/,
+        /(?:搜|查|检索|搜索|查找)\s*(?:一下|一下下|看看|下|了|过|到了|不到)/,
+        /(?:让我|帮你|给你)\s*(?:查查|搜搜|找找|检索|search|look\s*up)/i,
+        /(?:结果|答案|信息|内容)\s*(?:不|没|未)\s*(?:太|够|很|咋|怎|怎么)\s*(?:相关|准确|正确|好|靠谱|对)/,
+        /(?:换个|另一种|别的|其他)\s*(?:说法|问法|关键词|查询)/,
+        /search|look\s*up|find\s*out|check\s*if/i,
+    ]
+    for (const pattern of searchIntentPatterns) {
+        if (pattern.test(text)) return true
+    }
+    return false
+}
+
+// Extract a search query from the user's last message
+function extractSearchQuery() {
+    const msgs = store.visibleMessages || []
+    const userMsgs = msgs.filter(m => m.role === 'user')
+    if (!userMsgs.length) return ''
+    const last = userMsgs[userMsgs.length - 1]
+    return (last._apiText || last.text || '').trim()
+}
+
+async function handleWebFetch(url) {
+    try {
+        if (!url || !/^https?:\/\//.test(url)) return '无效的 URL'
+        const isCodeHost = /github\.com|gitee\.com|gitlab\.com|bitbucket\.org/i.test(url)
+        const endpoint = isCodeHost ? '/api/search/deep-crawl' : '/api/search/direct-crawl'
+        const crawlRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: getApiHeaders({}),
+            body: JSON.stringify({ url })
+        })
+        const crawlData = await crawlRes.json()
+        if (crawlData.text && crawlData.text.length > 20) {
+            // Truncate large responses for the AI
+            const maxLen = isCodeHost ? 200000 : 50000
+            let text = crawlData.text
+            if (text.length > maxLen) {
+                text = text.slice(0, maxLen) + '\n\n[... 已截断，如有需要请用 web_fetch 请求具体文件路径]'
+            }
+            return '[抓取成功]\n' + text
+        }
+        return '无法获取该页面内容（可能是私有的、不存在的、或被访问限制）'
+    } catch (e) {
+        return '抓取失败: ' + e.message
+    }
+}
+
 async function handleWebSearch(query) {
     try {
+        // Collect ALL URLs from both the search query AND the user's recent messages
+        const allUrls = []
+        const queryUrlMatch = query.match(/(https?:\/\/[^\s]+)/g)
+        if (queryUrlMatch) allUrls.push(...queryUrlMatch)
+
+        // Also scan the last 3 user messages for URLs the AI might have missed
+        const userMsgs = (store.visibleMessages || []).filter(m => m.role === 'user').slice(-3)
+        for (const m of userMsgs) {
+          const msgUrls = (m.text || '').match(/(https?:\/\/[^\s]+)/g)
+          if (msgUrls) allUrls.push(...msgUrls)
+        }
+
+        // Direct crawl ALL URLs found — deep-crawl for repos, direct for pages
+        if (allUrls.length) {
+            try {
+                const crawlResults = []
+                for (const u of allUrls) {
+                    try {
+                        const isCodeHost = /github\.com|gitee\.com|gitlab\.com|bitbucket\.org/i.test(u)
+                        const endpoint = isCodeHost ? '/api/search/deep-crawl' : '/api/search/direct-crawl'
+                        const crawlRes = await fetch(endpoint, {
+                            method: 'POST',
+                            headers: getApiHeaders({}),
+                            body: JSON.stringify({ url: u })
+                        })
+                        const crawlData = await crawlRes.json()
+                        if (crawlData.text && (crawlData.text.length > 50 || isCodeHost)) {
+                            crawlResults.push(crawlData.text)
+                        }
+                    } catch {}
+                }
+                if (crawlResults.length > 0) {
+                    return '直接抓取内容:\n' + crawlResults.join('\n\n---\n\n')
+                }
+            } catch {}
+        }
+
+        // Smart file drill-down: detect file path patterns in query and fetch from known repo
+        const FILE_EXT = /\.(jsx?|tsx?|vue|svelte|json|ya?ml|css|s[ac]ss|less|html?|xml|md|py|rb|go|rs|java|kt|swift|c|cpp|h|hpp|php|sql|sh|bash|ps1|bat|toml|ini|cfg|env|gitignore|dockerfile|makefile|lock)$/i
+        const filePathMatches = query.match(/([\w\/\\.-]+\.[a-zA-Z]{1,10})\b/g)
+        if (filePathMatches && allUrls.length) {
+            for (const filePath of filePathMatches) {
+                if (!FILE_EXT.test(filePath)) continue
+                try {
+                    const repoUrl = allUrls[0]
+                    const repoMatch = repoUrl.match(/(?:github|gitee)\.com\/([^\/]+)\/([^\/\s?#]+)/i)
+                    if (!repoMatch) continue
+                    const [, owner, repo] = repoMatch
+                    const isGitee = /gitee\.com/i.test(repoUrl)
+                    // Try main first, then master
+                    for (const branch of ['main', 'master']) {
+                        const rawUrl = isGitee
+                            ? `https://gitee.com/${owner}/${repo}/raw/${branch}/${filePath}`
+                            : `https://github.com/${owner}/${repo}/blob/${branch}/${filePath}`
+                        const crawlRes = await fetch('/api/search/direct-crawl', {
+                            method: 'POST', headers: getApiHeaders({}),
+                            body: JSON.stringify({ url: rawUrl })
+                        })
+                        const crawlData = await crawlRes.json()
+                        if (crawlData.text && crawlData.text.length > 50) {
+                            return '[文件内容]\n' + crawlData.text
+                        }
+                    }
+                } catch {}
+            }
+        }
         // 使用 dual search: Bing搜索 + 深度爬虫组合模式
         const res = await fetch('/api/search/dual', {
             method: 'POST',

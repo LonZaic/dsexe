@@ -179,11 +179,10 @@ async function quickStart() {
   try {
     inputText.value = ''
     const id = 'conv_' + Date.now()
-    // 必须在 createConversation 前设置——createConversation 会设 currentId，
-    // 导致 ChatView 立即挂载，onMounted 需要读到这个标记
-    store._pendingAutoReply = id
     await store.createConversation(id)
     await store.addUserMessage(text, [])
+    // 必须在 addUserMessage 之后设置——确保 ChatView 检测时消息已入库
+    store._pendingAutoReply = id
     router.push('/chat/' + id)
   } catch (e) {
     delete store._pendingAutoReply
@@ -226,6 +225,11 @@ async function openFeature(type) {
 async function syncRoute() {
   const id = route.params.id
   if (!id) return
+  // Guard: don't reload messages during pending auto-reply (quickStart flow)
+  if (store._pendingAutoReply === id) {
+    store.switchTab(id)
+    return
+  }
   // Load messages if not in cache (after refresh, session restores currentId but messagesMap is empty)
   if (!store.messagesMap[id] || !store.messagesMap[id].length) {
     await store.loadMessages(id)
@@ -236,6 +240,11 @@ async function syncRoute() {
 
 watch(() => route.params.id, (id) => {
   if (id) {
+    // Guard: don't reload messages during pending auto-reply (quickStart flow)
+    if (store._pendingAutoReply === id) {
+      store.switchTab(id)
+      return
+    }
     if (!store.messagesMap[id] || !store.messagesMap[id].length) store.loadMessages(id)
     else store.switchTab(id)
   }
