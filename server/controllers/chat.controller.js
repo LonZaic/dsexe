@@ -195,9 +195,9 @@ function listMessages(req, res) {
 function addMessage(req, res) {
   const c = conv.findById(req.params.id, req.user.id)
   if (!c) return sendError(res, '对话不存在', 'NOT_FOUND', 404)
-  const { role, text, parent_id, files, designs, reasoning } = req.body
+  const { role, text, parent_id, files, designs, reasoning, downloadFiles } = req.body
   if (!role || !text) return sendError(res, '缺少 role 或 text', 'BAD_REQUEST', 400)
-  const msgId = conv.addMessage(req.params.id, req.user.id, role, text, parent_id || null, files || '[]', designs || '[]', reasoning || '')
+  const msgId = conv.addMessage(req.params.id, req.user.id, role, text, parent_id || null, files || '[]', designs || '[]', reasoning || '', downloadFiles || '[]')
   sendSuccess(res, { id: msgId }, 201)
 }
 

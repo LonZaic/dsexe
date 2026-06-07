@@ -25,6 +25,7 @@
                         @next-branch="store.switchBranch(item.parent_id, 'next')"
                         @pick-device="onPickDevice(item, $event)"
                         @not-design="onNotDesign(item)"
+                        @preview-file="openFilePreview"
                         :download-files="item._downloadFiles || []"
                         :yammy-active="item.role === 'ai' && item.id === yammy.msgId"
                         :yammy-playing="yammy.playing"
@@ -87,6 +88,13 @@
                 @close="codePanelVisible = false"
             />
 
+            <!-- File Preview Panel -->
+            <FilePreviewPanel
+                :visible="filePreviewVisible"
+                :file="filePreviewFile"
+                @close="filePreviewVisible = false"
+            />
+
     </div>
 </template>
 
@@ -112,6 +120,7 @@ import MessageBubble from '../components/MessageBubble.vue'
 import InputBar from '../components/layout/InputBar.vue'
 import TokenBar from '../components/common/TokenBar.vue'
 import CodePanel from '../components/chat/CodePanel.vue'
+import FilePreviewPanel from '../components/chat/FilePreviewPanel.vue'
 import AppIcon from '../components/common/AppIcon.vue'
 
 import { useI18n } from '../composables/useI18n.js'
@@ -202,6 +211,8 @@ const previewSrc = ref(null)
 const inputBarRef = ref(null)
 const codePanelVisible = ref(false)
 const codePanelTabs = ref([])
+const filePreviewVisible = ref(false)
+const filePreviewFile = ref(null)
 const showModelMenu = ref(false)
 const MODELS = [
   { id: 'deepseek-v4-flash', label: 'V4 Flash', desc: '快速响应' },
@@ -712,6 +723,7 @@ watch(
     const blocks = parseCodeBlocks(lastAi.text)
     if (blocks.length && !codePanelVisible.value) {
       codePanelTabs.value = blocks
+      filePreviewVisible.value = false
       // Auto-open only if not already viewing
     }
   },
@@ -2000,6 +2012,13 @@ function pickDeviceLegacy(d) {
         inputText.value = ''
         _doSend(text)
     }
+}
+
+// ═══ File Preview ═══
+function openFilePreview(file) {
+  codePanelVisible.value = false
+  filePreviewFile.value = file
+  filePreviewVisible.value = true
 }
 
 async function regenerate() {

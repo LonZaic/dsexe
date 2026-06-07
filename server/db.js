@@ -322,9 +322,10 @@ const conv = {
   getMessages(convId, userId) {
     return db.prepare('SELECT * FROM messages WHERE conv_id = ? AND user_id = ? ORDER BY id ASC').all(convId, userId)
   },
-  addMessage(convId, userId, role, text, parentId, files, designs, reasoning) {
-    const stmt = db.prepare('INSERT INTO messages (conv_id, user_id, role, text, parent_id, files, designs, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    const result = stmt.run(convId, userId, role, text, parentId || null, files || '[]', designs || '[]', reasoning || '')
+  addMessage(convId, userId, role, text, parentId, files, designs, reasoning, downloadFiles = '[]') {
+    try { db.exec('ALTER TABLE messages ADD COLUMN download_files TEXT DEFAULT \'[]\'') } catch {}
+    const stmt = db.prepare('INSERT INTO messages (conv_id, user_id, role, text, parent_id, files, designs, reasoning, download_files) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    const result = stmt.run(convId, userId, role, text, parentId || null, files || '[]', designs || '[]', reasoning || '', downloadFiles)
     return result.lastInsertRowid
   },
   updateMessage(id, userId, text) {

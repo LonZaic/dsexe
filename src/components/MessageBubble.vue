@@ -149,6 +149,27 @@
                 <div class="bubble">{{ text }}</div>
             </template>
 
+            <!-- ═══ Download bar (AI generated files) ═══ -->
+            <div v-if="role === 'ai' && !streaming && allDownloads.length" class="download-bar">
+              <div
+                v-for="(f, i) in allDownloads"
+                :key="i"
+                class="download-chip"
+                :style="chipBorderStyle(f.name)"
+                :title="f.name + ' (' + formatDownloadSize(f.size) + ')'"
+              >
+                <AppIcon :name="getDownloadIcon(f.name)" :size="13" class="download-chip-icon" />
+                <span class="download-chip-name" @click="downloadOne(f)">{{ f.name }}</span>
+                <span class="download-chip-size">{{ formatDownloadSize(f.size) }}</span>
+                <button class="download-chip-btn" title="预览" @click.stop="$emit('previewFile', f)">
+                  <AppIcon name="eye" :size="14" />
+                </button>
+                <button class="download-chip-btn" title="下载" @click.stop="downloadOne(f)">
+                  <AppIcon name="download" :size="14" />
+                </button>
+              </div>
+            </div>
+
             <!-- branch version navigator -->
             <div v-if="role === 'ai' && !streaming && siblingCount > 1" class="branch-nav">
                 <button class="branch-btn" :title="t('prevVersion')" @click="$emit('prevBranch')">
@@ -205,6 +226,8 @@ import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { guessDeviceType, DEVICES } from '../utils/designPreview.js'
 import { useI18n } from '../composables/useI18n.js'
 import AgentProgress from './chat/AgentProgress.vue'
+import AppIcon from './common/AppIcon.vue'
+import { getFileCategory, getFileIcon, formatSize } from '../utils/filePreview.js'
 
 const { t } = useI18n()
 
@@ -225,9 +248,45 @@ const props = defineProps({
     yammyActive: { type: Boolean, default: false },
     yammyPlaying: { type: Boolean, default: false },
     yammyShaking: { type: Boolean, default: false },
+    downloadFiles: { type: Array, default: () => [] },
 })
 
-defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick'])
+defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick', 'previewFile'])
+
+// ═══ Download bar helpers ═══
+const allDownloads = computed(() => {
+  return (props.downloadFiles || []).filter(f => f && f.name)
+})
+
+function formatDownloadSize(bytes) { return formatSize(bytes) }
+
+function getDownloadIcon(name) { return getFileIcon(name) }
+
+function chipBorderStyle(name) {
+  const cat = getFileCategory(name)
+  const colors = {
+    image: 'rgba(148,163,184,0.3)',
+    svg: 'rgba(148,163,184,0.3)',
+    html: 'rgba(251,146,60,0.35)',
+    code: 'rgba(79,125,255,0.3)',
+    pdf: 'rgba(248,81,73,0.3)',
+    audio: 'rgba(52,211,153,0.35)',
+    video: 'rgba(167,139,250,0.35)',
+    binary: 'rgba(148,163,184,0.2)',
+    font: 'rgba(96,165,250,0.35)',
+  }
+  return { borderColor: colors[cat] || 'rgba(255,255,255,0.1)' }
+}
+
+function downloadOne(f) {
+  if (!f?.url) return
+  const a = document.createElement('a')
+  a.href = f.url
+  a.download = f.name || 'file'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
 
 async function previewFile(f) {
     if (f.type?.startsWith('image/')) {
@@ -489,6 +548,71 @@ async function copyText() {
 }
 .msg-actions button:hover { background: var(--bg3); color: var(--text); }
 .msg-actions button.del:hover { border-color: var(--red); color: var(--red); }
+
+/* ═══════════════════════════════
+   Download bar (AI generated files)
+   ═══════════════════════════════ */
+.download-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.download-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--bg);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  max-width: 100%;
+}
+.download-chip:hover {
+  background: var(--bg3);
+  border-color: rgba(255,255,255,0.22);
+}
+.download-chip-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.download-chip-name {
+  font-size: var(--font-size-sm, 12px);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.download-chip-name:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.download-chip-size {
+  font-size: var(--font-size-xs, 10px);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.download-chip-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+.download-chip-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
 
 /* ═══════════════════════════════
    Design preview

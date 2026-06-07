@@ -229,6 +229,45 @@
       <path d="M15 3H21V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M10 14L21 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
     </template>
+
+    <!-- Eye (preview) -->
+    <template v-else-if="name === 'eye'">
+      <path d="M2 12C2 12 6 5 12 5C18 5 22 12 22 12C22 12 18 19 12 19C6 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+    </template>
+
+    <!-- Eye Off (no preview / binary) -->
+    <template v-else-if="name === 'eye-off'">
+      <path d="M17.94 17.94C15.69 19.27 13.19 19.77 10.64 19.03C8.09 18.29 5.83 16.41 4.5 13.87C3.95 12.7 3.95 11.3 4.5 10.13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M9.9 4.24C10.59 4.08 11.29 4 12 4C18 4 22 12 22 12C21.39 13.29 20.63 14.46 19.74 15.47" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M14.12 14.12C13.56 14.68 12.8 15 12 15C10.34 15 9 13.66 9 12C9 11.2 9.32 10.44 9.88 9.88" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </template>
+
+    <!-- File Text -->
+    <template v-else-if="name === 'file-text'">
+      <path d="M14 2H6C5.47 2 5 2.47 5 3V21C5 21.53 5.47 22 6 22H18C18.53 22 19 21.53 19 21V7L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14 2V7H19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      <line x1="8" y1="17" x2="13" y2="17" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      <line x1="8" y1="9" x2="10" y2="9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    </template>
+
+    <!-- File Zip -->
+    <template v-else-if="name === 'file-zip'">
+      <path d="M14 2H6C5.47 2 5 2.47 5 3V21C5 21.53 5.47 22 6 22H18C18.53 22 19 21.53 19 21V7L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M14 2V7H19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="8" y="10" width="8" height="2" rx="0.5" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M9 14L11 10H13L15 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </template>
+
+    <!-- Maximize -->
+    <template v-else-if="name === 'maximize'">
+      <path d="M15 3H21V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M21 3L14 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 21H3V15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M3 21L10 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </template>
   </svg>
 </template>
 

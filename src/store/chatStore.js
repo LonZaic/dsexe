@@ -448,7 +448,8 @@ export const useChatStore = defineStore('chat', {
                 try {
                     const result = await convApi.addMessage(convId, {
                         role: 'ai', text: msg.text, parent_id: msg.parent_id,
-                        files: '[]', designs: designsJson, reasoning
+                        files: '[]', designs: designsJson, reasoning,
+                        downloadFiles: JSON.stringify(msg._downloadFiles || [])
                     })
                     realId = result.id
                 } catch (e) {
@@ -456,7 +457,7 @@ export const useChatStore = defineStore('chat', {
                     realId = 'failed_' + Date.now()
                 }
             } else {
-                realId = addMessage(convId, 'ai', msg.text, msg.parent_id, '[]', designsJson, reasoning)
+                realId = addMessage(convId, 'ai', msg.text, msg.parent_id, '[]', designsJson, reasoning, JSON.stringify(msg._downloadFiles || []))
             }
 
             const idx = msgs.findIndex(m => m.id === tempId)
@@ -466,6 +467,10 @@ export const useChatStore = defineStore('chat', {
                 designs: msg.designs || [],
                 _rawText: msg._rawText || '',
                 _agentEvents: msg._agentEvents || [],
+                _downloadFiles: msg._downloadFiles || [],
+                _devicePicker: msg._devicePicker || false,
+                _designSummary: msg._designSummary || '',
+                _isSystemFallback: msg._isSystemFallback || false,
             }
             if (idx !== -1) {
                 msgs[idx] = finalMsg

@@ -97,8 +97,9 @@ export async function initDB() {
             parent_id   INTEGER,
             files       TEXT DEFAULT '[]',
             designs     TEXT DEFAULT '[]',
-            reasoning   TEXT DEFAULT '',
-            created_at  TEXT DEFAULT (datetime('now','localtime')),
+            reasoning      TEXT DEFAULT '',
+            download_files TEXT DEFAULT '[]',
+            created_at     TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (conv_id) REFERENCES conversations(id) ON DELETE CASCADE
         );
 
@@ -256,11 +257,13 @@ export function getMessages(convId){
     return rows
 }
 
-export function addMessage(convId, role, text, parentId = null, files = '[]', designs = '[]', reasoning = ''){
+export function addMessage(convId, role, text, parentId = null, files = '[]', designs = '[]', reasoning = '', downloadFiles = '[]'){
+    // Ensure download_files column exists (migration for older DBs)
+    try { db.run(`ALTER TABLE messages ADD COLUMN download_files TEXT DEFAULT '[]'`) } catch {}
     if (parentId != null) {
-        db.run(`INSERT INTO messages (conv_id, role, text, parent_id, files, designs, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?)`, [convId, role, text, parentId, files, designs, reasoning])
+        db.run(`INSERT INTO messages (conv_id, role, text, parent_id, files, designs, reasoning, download_files) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [convId, role, text, parentId, files, designs, reasoning, downloadFiles])
     } else {
-        db.run(`INSERT INTO messages (conv_id, role, text, files, designs, reasoning) VALUES (?, ?, ?, ?, ?, ?)`, [convId, role, text, files, designs, reasoning])
+        db.run(`INSERT INTO messages (conv_id, role, text, files, designs, reasoning, download_files) VALUES (?, ?, ?, ?, ?, ?, ?)`, [convId, role, text, files, designs, reasoning, downloadFiles])
     }
     saveDB()
     const result = db.exec("SELECT last_insert_rowid()")
