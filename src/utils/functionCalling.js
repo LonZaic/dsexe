@@ -106,7 +106,7 @@ function getClassifyTool() {
 async function classifyIntent(userText, apikey, contextMsgs = []) {
     // Build messages: system + recent context (max 4) + current user msg
     const messages = [
-        { role: 'system', content: '严格判断用户意图。只有用户明确要求"设计网页/UI界面/做页面/画组件/创建前端/写HTML页面"才返回design。注意：画架构图、流程图、时序图、类图、Mermaid图、SVG图表、数据可视化、代码结构图 —— 这些一律返回chat，不是design。不确定就返回chat。' },
+        { role: 'system', content: '判断用户意图。只有用户明确说"设计网页/做UI/画界面/H5页面/前端组件/写个网站/做个页面/APP界面"才返回design。以下场景必须返回chat：写代码/脚本/程序、代码版本转换（py转js等）、算法/数据结构、后端/CLI/API、数据处理、画架构图/流程图/时序图/Mermaid图/SVG图表。不确定就返回chat。用户的当前需求是"写代码"还是"设计UI界面"？' },
     ]
     const recent = contextMsgs.slice(-4)
     for (const m of recent) {
@@ -115,12 +115,15 @@ async function classifyIntent(userText, apikey, contextMsgs = []) {
     messages.push({ role: 'user', content: userText })
 
     const body = {
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         stream: false,
-        max_tokens: 100,
+        max_tokens: 500,  // reasoning models need extra budget for think+tool_call
         messages,
         tools: [getClassifyTool()],
-        tool_choice: { type: 'function', function: { name: 'classify_intent' } },
+        // ⚠️ Use 'auto' instead of forced tool_choice — DeepSeek V4 Flash
+        // "thinking mode" rejects { type: 'function', function: { name: '...' } }
+        // with 400: "Thinking mode does not support this tool_choice"
+        tool_choice: 'auto',
     }
 
     const { getApiHeaders } = await import('./apiHeaders.js')
@@ -139,7 +142,10 @@ async function classifyIntent(userText, apikey, contextMsgs = []) {
     const data = (wrapper && typeof wrapper === 'object' && 'success' in wrapper) ? (wrapper.data?.raw || wrapper.data || wrapper) : wrapper
     const tc = data.choices?.[0]?.message?.tool_calls?.[0]
     if (!tc || tc.function?.name !== 'classify_intent') {
-        throw new Error('Classification failed: no tool call')
+        // Model chose not to call the tool — fallback to checking content
+        const content = (data.choices?.[0]?.message?.content || '').toLowerCase()
+        const isDesign = content.includes('design') && !content.includes('chat')
+        return { intent: isDesign ? 'design' : 'chat', summary: '' }
     }
 
     let args = {}

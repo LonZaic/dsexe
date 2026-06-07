@@ -36,6 +36,7 @@ async function chat(req, res) {
     })
     if (!response.ok) {
       const err = await response.text()
+      console.error('[AI Chat] DeepSeek API error:', response.status, err.slice(0, 500))
       return sendError(res, 'AI API 错误', 'AI_API_ERROR', response.status, err)
     }
     const data = await response.json()
@@ -77,6 +78,8 @@ async function chatStream(req, res) {
     })
 
     if (!response.ok) {
+      const err = await response.text()
+      console.error('[AI Stream] DeepSeek API error:', response.status, err.slice(0, 500))
       res.write(`data: ${JSON.stringify({ error: 'API error ' + response.status })}\n\n`)
       res.end()
       return
