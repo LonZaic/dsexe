@@ -202,7 +202,7 @@
                 </button>
             </div>
             <div class="msg-bottom-row" v-if="(role === 'ai' && yammyActive) || (!streaming && text)">
-                <div class="msg-actions" v-if="!streaming && text">
+                <div :class="['msg-actions', { 'msg-actions--stuck': showFolderPicker }]" v-if="!streaming && text">
                     <button v-if="role === 'ai'" :title="t('regenerate')" @click="$emit('regenerate')">
                       <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                         <path d="M1.5 3.5V7.5H5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -210,10 +210,21 @@
                         <path d="M10.18 3.73a5 5 0 0 0-7.2-.48L1.5 4.5M11.5 8.5l-1.48 1.25a5 5 0 0 1-7.2-.48" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </button>
-                    <button :title="t('copy')" @click="copyText">
-                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <button :title="copyDone ? '已复制' : t('copy')" @click="doCopy" :class="{ 'action-done': copyDone }">
+                      <svg v-if="copyDone" width="13" height="13" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <svg v-else width="13" height="13" viewBox="0 0 13 13" fill="none">
                         <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
                         <path d="M2.5 9V2.5A1 1 0 0 1 3.5 1.5H9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                      </svg>
+                    </button>
+                    <button ref="bookmarkBtnRef" v-if="role === 'ai'" :title="saved ? '已收藏' : '收藏'" @click="onBookmarkClick" :class="{ 'action-done': bookmarkDone }">
+                      <svg v-if="bookmarkDone" width="13" height="13" viewBox="0 0 24 24" fill="none">
+                        <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <svg v-else width="13" height="13" viewBox="0 0 24 24" :fill="saved ? 'var(--yellow)' : 'none'" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
                       </svg>
                     </button>
                     <button v-if="role === 'user'" :title="t('editMsg')" @click="$emit('edit', text)">
@@ -233,16 +244,36 @@
             </div>
         </div>
     </div>
+
+    <!-- Bookmark folder picker — teleported to body to avoid VirtualList clipping -->
+    <Teleport to="body">
+      <Transition name="bm-pop">
+        <div ref="popupRef" v-if="showFolderPicker" class="bm-folder-popup" :style="popupStyle" @click.stop>
+          <div class="bm-folder-title">添加到收藏夹</div>
+          <div class="bm-folder-list">
+            <button class="bm-folder-opt" @click="selectFolder(null)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>全局收藏</span>
+            </button>
+            <button v-for="col in bookmarkFolders" :key="col.id" class="bm-folder-opt" @click="selectFolder(col.id)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v11z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>{{ col.name }}</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { renderMarkdown } from '../utils/markdown.js'
 import { loadFile } from '../utils/fileDB.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { guessDeviceType, DEVICES } from '../utils/designPreview.js'
 import { useI18n } from '../composables/useI18n.js'
 import AgentProgress from './chat/AgentProgress.vue'
+import { getCollections, saveItem, isItemDuplicate } from '../db/database.js'
 
 const { t } = useI18n()
 
@@ -267,6 +298,114 @@ const props = defineProps({
 })
 
 defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick', 'previewFile'])
+
+// ═══ Copy feedback ═══
+const copyDone = ref(false)
+let _copyTimer = null
+
+async function doCopy() {
+  try {
+    await navigator.clipboard.writeText(props.text)
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = props.text
+    ta.style.cssText = 'position:fixed;opacity:0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+  copyDone.value = true
+  clearTimeout(_copyTimer)
+  _copyTimer = setTimeout(() => { copyDone.value = false }, 1800)
+}
+
+// ═══ Bookmark ═══
+const saved = ref(false)
+const bookmarkDone = ref(false)
+let _bookmarkTimer = null
+const showFolderPicker = ref(false)
+const bookmarkFolders = ref([])
+const bookmarkBtnRef = ref(null)
+const popupRef = ref(null)
+const popupStyle = ref({})
+
+function closePicker() {
+  showFolderPicker.value = false
+  popupStyle.value = {}
+  document.removeEventListener('click', onGlobalClick)
+}
+
+function onGlobalClick(e) {
+  // Close if clicking outside both the popup and the bookmark button
+  const insidePopup = popupRef.value && popupRef.value.contains(e.target)
+  const insideBtn = bookmarkBtnRef.value && bookmarkBtnRef.value.contains(e.target)
+  if (!insidePopup && !insideBtn) {
+    closePicker()
+  }
+}
+
+function onBookmarkClick(e) {
+  e.stopPropagation()
+  if (saved.value || bookmarkDone.value) return
+  // Fetch collections directly from DB — always fresh
+  bookmarkFolders.value = getCollections()
+  console.log('[bookmark] collections:', bookmarkFolders.value.length, bookmarkFolders.value.map(c => c.name))
+  if (bookmarkFolders.value.length === 0) {
+    doSave(null)
+  } else {
+    // Calculate position relative to the bookmark button
+    const rect = bookmarkBtnRef.value?.getBoundingClientRect()
+    if (rect) {
+      popupStyle.value = {
+        position: 'fixed',
+        bottom: (window.innerHeight - rect.top + 8) + 'px',
+        left: Math.min(rect.left, window.innerWidth - 220) + 'px',
+        zIndex: '9999',
+      }
+    }
+    showFolderPicker.value = true
+    // Listen for outside click to close (deferred to avoid self-trigger)
+    setTimeout(() => document.addEventListener('click', onGlobalClick), 0)
+  }
+}
+
+function selectFolder(colId) {
+  closePicker()
+  doSave(colId)
+}
+
+function doSave(colId) {
+  const preview = (props.text || '').replace(/\n/g, ' ').slice(0, 30)
+  const msgJson = JSON.stringify({
+    text: props.text,
+    reasoning: props.reasoning,
+    designs: props.designs,
+    downloadFiles: props.downloadFiles,
+    rawText: props.rawText,
+    files: props.files
+  })
+  // Dedup: each message can only be saved once per collection
+  if (isItemDuplicate(colId, msgJson)) {
+    // Already saved to this collection — just show brief feedback
+    saved.value = true
+    bookmarkDone.value = true
+    clearTimeout(_bookmarkTimer)
+    _bookmarkTimer = setTimeout(() => { bookmarkDone.value = false }, 1200)
+    return
+  }
+  saveItem(colId, msgJson, preview)
+  saved.value = true
+  bookmarkDone.value = true
+  clearTimeout(_bookmarkTimer)
+  _bookmarkTimer = setTimeout(() => { bookmarkDone.value = false }, 1800)
+}
+
+onBeforeUnmount(() => {
+  clearTimeout(_copyTimer)
+  clearTimeout(_bookmarkTimer)
+  document.removeEventListener('click', onGlobalClick)
+})
 
 // ═══ Download bar — merge server files + auto-detected code blocks ═══
 const LANG_EXT = {
@@ -653,16 +792,54 @@ async function copyText() {
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
 /* ─── message actions ─── */
-.msg-actions { display: flex; gap: 3px; opacity: 0; transition: opacity 0.12s; }
+.msg-actions { display: flex; gap: 3px; opacity: 0; transition: opacity 0.12s; position: relative; }
 .body:hover .msg-actions { opacity: 1; }
+.msg-actions--stuck { opacity: 1 !important; }
 .msg-actions button {
     height: 24px; border-radius: var(--radius-full); padding: 0 8px; font-size: 11px;
     border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2);
     cursor: pointer; display: flex; align-items: center; justify-content: center;
-    color: var(--text3); transition: background 0.1s, border-color 0.1s, color 0.1s;
+    color: var(--text3); transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .msg-actions button:hover { background: var(--bg3); color: var(--text); }
 .msg-actions button.del:hover { border-color: var(--red); color: var(--red); }
+.msg-actions button.action-done {
+  border-color: var(--green) !important; color: var(--green) !important;
+  background: rgba(34,197,94,0.08) !important;
+}
+.msg-actions button.action-done svg {
+  animation: checkPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes checkPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Bookmark popup — rendered via Teleport to body, positioned with fixed coords */
+.bm-folder-popup {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  padding: 8px 0; min-width: 200px;
+}
+.bm-folder-title {
+  font-size: 11px; font-weight: 600; color: var(--text3);
+  padding: 0 12px 8px; letter-spacing: 0.5px; text-transform: uppercase;
+}
+.bm-folder-list { max-height: 200px; overflow-y: auto; padding: 0 6px; }
+.bm-folder-opt {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px; border-radius: var(--radius-sm);
+  border: none; background: transparent; color: var(--text2);
+  font-size: 12px; cursor: pointer; font-family: inherit; text-align: left;
+  transition: all 0.12s ease;
+}
+.bm-folder-opt:hover { background: var(--bg2); color: var(--text); }
+.bm-folder-opt svg { flex-shrink: 0; color: var(--text3); transition: color 0.12s; }
+.bm-folder-opt:hover svg { color: var(--accent); }
+
+.bm-pop-enter-active { transition: all 0.18s cubic-bezier(0.16,1,0.3,1); }
+.bm-pop-leave-active { transition: all 0.12s ease; }
+.bm-pop-enter-from, .bm-pop-leave-to { opacity: 0; transform: translateY(6px) scale(0.96); }
 
 /* ═══════════════════════════════
    Download bar (AI generated files + code blocks)

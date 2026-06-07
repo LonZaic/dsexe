@@ -146,6 +146,23 @@ export async function initDB() {
             created_at  TEXT DEFAULT (datetime('now','localtime')),
             FOREIGN KEY (conv_id) REFERENCES code_conversations(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS
+        collections (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS
+        saved_items (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            collection_id TEXT,
+            msg_json    TEXT NOT NULL,
+            preview     TEXT DEFAULT '',
+            created_at  TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE SET NULL
+        );
     `)
 
     // migration: add columns if they don't exist on older DBs
@@ -426,5 +443,93 @@ export function updateCodeConversationProject(id, projectPath, projectName) {
 export function deleteCodeConversation(id) {
   db.run('DELETE FROM code_messages WHERE conv_id = ?', [id])
   db.run('DELETE FROM code_conversations WHERE id = ?', [id])
+  saveDB()
+}
+
+// ═══ Collections (Favorites) ═══
+
+export function getCollections() {
+  const stmt = db.prepare('SELECT * FROM collections ORDER BY created_at ASC')
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function createCollection(name) {
+  const id = 'col_' + Date.now()
+  db.run('INSERT INTO collections (id, name) VALUES (?, ?)', [id, name])
+  saveDB()
+  return id
+}
+
+export function deleteCollection(id) {
+  db.run('UPDATE saved_items SET collection_id = NULL WHERE collection_id = ?', [id])
+  db.run('DELETE FROM collections WHERE id = ?', [id])
+  saveDB()
+}
+
+export function renameCollection(id, name) {
+  db.run('UPDATE collections SET name = ? WHERE id = ?', [name, id])
+  saveDB()
+}
+
+export function getSavedItems(collectionId) {
+  const sql = collectionId
+    ? 'SELECT * FROM saved_items WHERE collection_id = ? ORDER BY created_at DESC'
+    : 'SELECT * FROM saved_items WHERE collection_id IS NULL ORDER BY created_at DESC'
+  const stmt = db.prepare(sql)
+  if (collectionId) stmt.bind([collectionId])
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function getAllSavedItems() {
+  const stmt = db.prepare('SELECT * FROM saved_items ORDER BY created_at DESC')
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function searchSavedItems(query) {
+  const stmt = db.prepare("SELECT * FROM saved_items WHERE preview LIKE ? OR msg_json LIKE ? ORDER BY created_at DESC")
+  const like = `%${query}%`
+  stmt.bind([like, like])
+  const rows = []
+  while (stmt.step()) rows.push(stmt.getAsObject())
+  stmt.free()
+  return rows
+}
+
+export function saveItem(collectionId, msgJson, preview) {
+  db.run('INSERT INTO saved_items (collection_id, msg_json, preview) VALUES (?, ?, ?)',
+    [collectionId || null, msgJson, preview || ''])
+  saveDB()
+}
+
+export function deleteSavedItem(id) {
+  db.run('DELETE FROM saved_items WHERE id = ?', [id])
+  saveDB()
+}
+
+export function isItemDuplicate(collectionId, msgJson) {
+  const sql = collectionId
+    ? 'SELECT COUNT(*) as cnt FROM saved_items WHERE collection_id = ? AND msg_json = ?'
+    : 'SELECT COUNT(*) as cnt FROM saved_items WHERE collection_id IS NULL AND msg_json = ?'
+  const stmt = db.prepare(sql)
+  if (collectionId) stmt.bind([collectionId, msgJson])
+  else stmt.bind([msgJson])
+  let count = 0
+  if (stmt.step()) count = stmt.getAsObject().cnt
+  stmt.free()
+  return count > 0
+}
+
+export function moveSavedItem(itemId, newCollectionId) {
+  db.run('UPDATE saved_items SET collection_id = ? WHERE id = ?',
+    [newCollectionId || null, itemId])
   saveDB()
 }

@@ -42,6 +42,11 @@ const routes = [
     path: '/group/:id',
     name: 'group',
     component: () => import('../pages/GroupChatView.vue')
+  },
+  {
+    path: '/collections',
+    name: 'collections',
+    component: () => import('../pages/CollectionsView.vue')
   }
 ]
 

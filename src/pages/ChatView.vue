@@ -127,6 +127,7 @@ import FilePreviewPanel from '../components/chat/FilePreviewPanel.vue'
 import AppIcon from '../components/common/AppIcon.vue'
 
 import { useI18n } from '../composables/useI18n.js'
+import { confirmDelete } from '../utils/confirm.js'
 
 // ═══ DSML / Claude-style XML Tool Call Parser ═══
 // DeepSeek models sometimes output Claude-style XML tool invocations as text
@@ -2094,10 +2095,18 @@ async function onEditMessage(item) {
     await callStreamAPI([])
 }
 
-function onDeleteMessage(item) {
-    if (confirm('确定删除这条消息？')) {
-        store.removeMessage(item.id)
-    }
+async function onDeleteMessage(item) {
+    const isAi = item.role === 'ai'
+    const label = isAi ? 'AI 回复' : '消息'
+    const ok = await confirmDelete({
+        title: `删除${label}`,
+        message: isAi
+            ? '确定要删除这条 AI 回复吗？'
+            : '确定要删除这条消息吗？',
+        step: 1,
+    })
+    if (!ok) return
+    store.removeMessage(item.id)
 }
 
 // ─── Fake search detection ───

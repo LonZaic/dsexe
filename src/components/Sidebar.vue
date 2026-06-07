@@ -1,6 +1,10 @@
 <template>
     <!-- Hamburger button (mobile only) -->
-    <button class="hamburger-btn" @click="toggleSidebar" title="菜单">|||</button>
+    <button class="hamburger-btn" @click="toggleSidebar" title="菜单">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+    </button>
 
     <!-- Overlay for mobile -->
     <div :class="['sidebar-overlay', { show: mobileOpen }]" @click="closeSidebar"></div>
@@ -8,7 +12,11 @@
     <div :class="['sidebar', { open: mobileOpen }]">
         <div class="sidebar-header">
             <span class="logo">AI Chat</span>
-            <button class="btn-close-mobile" @click="closeSidebar">&times;</button>
+            <button class="btn-close-mobile" @click="closeSidebar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
         </div>
 
         <button class="btn-new" @click="newConversation">+ 新对话</button>
@@ -27,8 +35,16 @@
                 @click="goToChat(conv.id)"
             >
                 <span class="conv-title" :title="'双击改名: ' + (conv.title || '新对话')">{{ conv.title || '新对话' }}</span>
-                <button class="btn-rename" @click.stop="rename(conv)" title="改名">改</button>
-                <button class="btn-delete" @click.stop="deleteChat(conv.id)">x</button>
+                <button class="btn-rename" @click.stop="rename(conv)" title="改名">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="btn-delete" @click.stop="deleteChat(conv.id)" title="删除">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                      <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-.867 12.142A2 2 0 0 1 16.138 20H7.862a2 2 0 0 1-1.995-1.858L5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
             </div>
         </div>
 
@@ -46,6 +62,7 @@ import { ref } from 'vue'
 import { inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatStore } from '../store/chatStore.js'
+import { confirmDelete } from '../utils/confirm.js'
 
 const theme = inject('theme')
 const router = useRouter()
@@ -85,7 +102,21 @@ function rename(conv) {
     }
 }
 
-function deleteChat(id) {
+async function deleteChat(id) {
+    const conv = store.conversations.find(c => c.id === id)
+    const name = conv?.title || '对话'
+    const ok1 = await confirmDelete({
+        title: '删除对话',
+        message: `确定要删除「${name}」吗？其中的所有消息都将被移除。`,
+        step: 1,
+    })
+    if (!ok1) return
+    const ok2 = await confirmDelete({
+        title: '确认删除',
+        message: `删除后无法恢复「${name}」的全部消息。确认继续？`,
+        step: 2,
+    })
+    if (!ok2) return
     store.deleteConv(id)
 }
 
