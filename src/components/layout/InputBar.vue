@@ -122,7 +122,7 @@
           :title="t('changeModel')"
           @click="$emit('toggle-model-menu')"
         >
-          <span class="model-indicator" />
+          <span :class="['model-indicator', model.includes('flash') ? 'flash' : 'pro']" />
           <span class="toggle-label">{{ modelLabel }}</span>
           <AppIcon name="chevron-down" :size="12" />
         </button>
@@ -359,7 +359,9 @@ defineExpose({ textareaRef, fileInput })
 .thinking-btn.off:hover { color: var(--yellow); }
 
 .toggle-label { font-size: 11px; font-weight: 400; }
-.model-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.model-indicator { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.model-indicator.flash { background: var(--yellow); }
+.model-indicator.pro { background: var(--accent); }
 .model-btn { gap: 5px; }
 
 /* Plus menu */

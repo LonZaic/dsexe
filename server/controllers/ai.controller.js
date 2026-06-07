@@ -32,6 +32,7 @@ async function chat(req, res) {
         stream: false,
         ...(rest.tools ? { tools: rest.tools } : {}),
         ...(rest.tool_choice ? { tool_choice: rest.tool_choice } : {}),
+        ...(rest.thinking ? { thinking: rest.thinking } : {}),
       }),
     })
     if (!response.ok) {
@@ -74,6 +75,7 @@ async function chatStream(req, res) {
         stream: true,
         ...(rest.tools ? { tools: rest.tools } : {}),
         ...(rest.tool_choice ? { tool_choice: rest.tool_choice } : {}),
+        ...(rest.thinking ? { thinking: rest.thinking } : {}),
       }),
     })
 
