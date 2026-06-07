@@ -74,13 +74,19 @@ export const useChatStore = defineStore('chat', {
         _hydrateMsg(m) {
             let files = []
             let designs = []
+            let downloadFiles = []
             if (m.files && m.files !== '[]') {
                 try { files = JSON.parse(m.files) } catch {}
             }
             if (m.designs && m.designs !== '[]') {
                 try { designs = JSON.parse(m.designs) } catch {}
             }
-            return { ...m, files, designs, reasoning: m.reasoning || '' }
+            // Support both download_files (DB column) and downloadFiles (API response)
+            const dlRaw = m.download_files || m.downloadFiles || '[]'
+            if (dlRaw && dlRaw !== '[]') {
+                try { downloadFiles = JSON.parse(dlRaw) } catch {}
+            }
+            return { ...m, files, designs, _downloadFiles: downloadFiles, reasoning: m.reasoning || '' }
         },
 
         _initBranch(msgs) {

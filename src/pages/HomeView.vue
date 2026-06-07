@@ -80,6 +80,16 @@
 
       <!-- Inline input for quick start -->
       <div class="input-wrap">
+        <!-- File chips -->
+        <div v-if="pendingFiles.length" class="hp-file-chips">
+          <div v-for="(f, i) in pendingFiles" :key="i" class="hp-file-chip" :title="f.name">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M14 2H6C5.47 2 5 2.47 5 3V21C5 21.53 5.47 22 6 22H18C18.53 22 19 21.53 19 21V7L14 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 2V7H19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="hp-file-chip-name">{{ f.name }}</span>
+            <button class="hp-file-chip-remove" @click="pendingFiles.splice(i, 1)">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
         <div class="input-box">
           <textarea
             ref="textareaRef"
@@ -87,6 +97,7 @@
             :placeholder="t('askPlaceholder')"
             @keydown="onKey"
             @input="autoResize"
+            @paste="onPaste"
             rows="1"
           />
           <div class="input-toolbar">
@@ -95,13 +106,17 @@
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3v3.5L9 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
                 {{ thinkingLabel }}
               </button>
+              <input ref="fileInputRef" type="file" multiple class="hp-hidden-input" @change="onFilesSelected" />
+              <button class="tool-btn" title="添加文件" @click="fileInputRef?.click()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
             </div>
             <div class="toolbar-right">
               <button class="model-selector" @click="cycleModel">
                 <span class="model-dot" />
                 {{ modelLabel }}
               </button>
-              <button class="send-btn" @click="quickStart()" :disabled="!inputText.trim()">
+              <button class="send-btn" @click="quickStart()" :disabled="!inputText.trim() && !pendingFiles.length">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M7 1v12M3 5l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
@@ -134,6 +149,8 @@ const openSettings = inject('openSettings')
 
 const inputText = ref('')
 const textareaRef = ref(null)
+const fileInputRef = ref(null)
+const pendingFiles = ref([])
 const loggedIn = ref(isLoggedIn())
 const model = ref('deepseek-v4-flash')
 const thinking = ref('medium')
@@ -164,7 +181,10 @@ function cycleModel() {
 }
 
 function onKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); quickStart() }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    if (!inputText.value.trim() && !pendingFiles.value.length) return
+    e.preventDefault(); quickStart()
+  }
 }
 function autoResize() {
   const el = textareaRef.value
@@ -173,14 +193,56 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
 }
 
+// ═══ File handling ═══
+function onPaste(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const files = []
+  for (const item of items) {
+    if (item.kind === 'file') files.push(item.getAsFile())
+  }
+  if (files.length) {
+    e.preventDefault()
+    processFiles(files)
+  }
+}
+async function onFilesSelected(e) {
+  if (e.target.files?.length) {
+    processFiles(Array.from(e.target.files))
+    e.target.value = ''
+  }
+}
+async function processFiles(files) {
+  for (const f of files) {
+    let content = ''
+    const isText = ['txt','js','ts','py','html','css','json','xml','md','yml','yaml','sh','bat','c','cpp','h','java','go','rs','rb','php','sql','csv','log','ini','cfg','toml','vue','svelte','less','scss','env','gitignore'].includes((f.name.split('.').pop()||'').toLowerCase())
+    if (f.type?.startsWith('image/')) {
+      content = await new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(f) })
+    } else if (isText) {
+      content = await new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsText(f) })
+    } else {
+      // Try extractFile for docx/pdf/etc — import dynamically
+      try {
+        const { extractFileContent } = await import('../utils/extractFile.js')
+        content = await extractFileContent(f) || ''
+      } catch { content = '' }
+    }
+    pendingFiles.value = [...pendingFiles.value, { name: f.name, type: f.type, size: f.size, content }]
+  }
+}
+function removeFile(i) { pendingFiles.value.splice(i, 1) }
+
 async function quickStart() {
   const text = inputText.value.trim()
-  if (!text) return
+  const hasFiles = pendingFiles.value.length > 0
+  if (!text && !hasFiles) return
   try {
     inputText.value = ''
+    const files = pendingFiles.value.map(f => ({ name: f.name, type: f.type, size: f.size, content: f.content || '' }))
+    pendingFiles.value = []
     const id = 'conv_' + Date.now()
     await store.createConversation(id)
-    await store.addUserMessage(text, [])
+    await store.addUserMessage(text || '(文件)', files)
     // 必须在 addUserMessage 之后设置——确保 ChatView 检测时消息已入库
     store._pendingAutoReply = id
     router.push('/chat/' + id)
@@ -394,6 +456,23 @@ onMounted(async () => {
 .feature-card-desc { font-size: 12px; color: var(--text3); line-height: 1.5; font-weight: 300; }
 
 /* Input */
+/* File chips */
+.hp-file-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.hp-file-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 11px; color: var(--text2); max-width: 200px;
+}
+.hp-file-chip svg { flex-shrink: 0; color: var(--text-muted); }
+.hp-file-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hp-file-chip-remove {
+  display: flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%; border: none; background: transparent;
+  color: var(--text3); flex-shrink: 0; cursor: pointer; transition: all .12s;
+}
+.hp-file-chip-remove:hover { background: rgba(248,81,73,0.12); color: var(--red); }
+.hp-hidden-input { display: none; }
+
 .input-wrap {
   width: 100%;
   max-width: 680px;

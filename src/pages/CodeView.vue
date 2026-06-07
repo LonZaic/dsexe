@@ -237,9 +237,23 @@
 
       <TokenBar :promptTokens="tokPrompt" :completionTokens="tokComp" :totalTokens="tokTotal" :model="codeModel" :balance="balance" @refresh-balance="fetchBalance" />
       <div class="cv-chat-bar">
+        <!-- Image chips (code mode — images only) -->
+        <div v-if="pendingImages.length" class="cv-img-chips">
+          <div class="cv-img-chip">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15L16 10L5 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="cv-img-chip-text">图片 数量: {{ pendingImages.length }}</span>
+            <button class="cv-img-chip-remove" @click="pendingImages = []">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
         <div class="cv-chat-row">
           <textarea ref="inputRef" v-model="task" :placeholder="t('codePlaceholder')" :rows="1"
-            @keydown="onKey" @input="autoResize" class="cv-input" />
+            @keydown="onKey" @input="autoResize" @paste="onPasteImages" class="cv-input" />
+          <input ref="imgInputRef" type="file" accept="image/*" multiple class="cv-hidden-input" @change="onImagesSelected" />
+          <button class="cv-img-btn" title="添加图片" @click="imgInputRef?.click()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15L16 10L5 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <div class="cv-model-wrap">
             <button class="cv-model-btn" @click="showModelMenu = !showModelMenu">
               <span class="cv-model-dot" :class="{ pro: (codeModel || '').includes('pro') }"></span>
@@ -395,6 +409,8 @@ const store = useCodeStore()
 const renderMd = (text) => renderMarkdown(text || '')
 const task = ref('')
 const inputRef = ref(null)
+const imgInputRef = ref(null)
+const pendingImages = ref([]) // { name, type, size, key, data, content }
 const codeRef = ref(null)
 const chatRef = ref(null)
 const rootRef = ref(null)
@@ -948,6 +964,45 @@ function autoResize() {
 
 let _abortCtrl = null
 let _timerInterval = null
+
+// ═══ Image upload (code mode — images only) ═══
+function onPasteImages(e) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  const imgFiles = []
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      imgFiles.push(item.getAsFile())
+    }
+  }
+  if (imgFiles.length) {
+    e.preventDefault()
+    processImages(imgFiles)
+  }
+}
+
+async function onImagesSelected(e) {
+  const files = e.target.files
+  if (!files?.length) return
+  processImages(Array.from(files))
+  e.target.value = ''
+}
+
+async function processImages(files) {
+  for (const f of files) {
+    if (!f.type?.startsWith('image/')) continue
+    const key = 'ci_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+    const dataUrl = await new Promise(resolve => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result)
+      r.readAsDataURL(f)
+    })
+    pendingImages.value = [...pendingImages.value, {
+      name: f.name, type: f.type, size: f.size, key, data: dataUrl, content: dataUrl
+    }]
+  }
+}
+
 async function send() {
   const txt = task.value.trim()
   if (!txt || loading.value || !store.projectPath) return
@@ -958,8 +1013,17 @@ async function send() {
   if (!store.currentId) store.createConversation(txt.slice(0, 30))
   store.tasks = []
   tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0  // reset token counter
-  store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: txt })
-  store.addUserMessage(txt)
+
+  // Include images in task
+  const imgs = pendingImages.value
+  let displayText = txt
+  if (imgs.length) {
+    const imgNames = imgs.map(i => i.name).join(', ')
+    displayText = txt + (txt ? '\n' : '') + `[图片: ${imgNames}]`
+  }
+  store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: displayText, files: [...imgs] })
+  store.addUserMessage(displayText)
+  pendingImages.value = []
 
   const startTime = Date.now()
   const dbId = store.addAiMessage('', '', '', '[]', '[]', false, false, '0s')
@@ -1351,6 +1415,29 @@ async function send() {
 .cv-final { padding: 8px 10px; font-size: 13px; line-height: 1.6; color: var(--text); border-top: 1px solid var(--border); max-height: 300px; overflow-y: auto; }
 .cv-final-err { border-top-color: rgba(248,81,73,.2); }
 
+
+/* ─── Image chips (code mode) ─── */
+.cv-img-chips { padding: 0 10px 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+.cv-img-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 11px; color: var(--text2);
+}
+.cv-img-chip svg { flex-shrink: 0; color: var(--text-muted); }
+.cv-img-chip-text { white-space: nowrap; }
+.cv-img-chip-remove {
+  display: flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%; border: none; background: transparent;
+  color: var(--text3); flex-shrink: 0; cursor: pointer; transition: all .12s;
+}
+.cv-img-chip-remove:hover { background: rgba(248,81,73,0.12); color: var(--red); }
+.cv-img-btn {
+  width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+  border: none; background: transparent; color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.cv-img-btn:hover { background: var(--bg4); color: var(--accent); }
+.cv-hidden-input { display: none; }
 
 /* ─── Chat bar ─── */
 .cv-chat-bar { padding: 8px 10px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }

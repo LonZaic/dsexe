@@ -215,7 +215,7 @@ const binaryHint = computed(() => {
 // ═══ Watchers ═══
 
 watch(() => props.visible, async (v) => {
-  if (v && props.file?.url) {
+  if (v && (props.file?.url || props.file?.code)) {
     await loadFile()
   } else {
     resetState()
@@ -223,7 +223,7 @@ watch(() => props.visible, async (v) => {
 })
 
 watch(() => props.file?.url, async (newUrl) => {
-  if (props.visible && newUrl) {
+  if (props.visible && (newUrl || props.file?.code)) {
     await loadFile()
   }
 })
@@ -241,6 +241,29 @@ async function loadFile() {
   try {
     const cat = fileCategory.value
     const url = props.file.url
+
+    // Inline code preview (no URL, code provided directly)
+    if (!url && props.file.code) {
+      content.value = props.file.code
+      highlightLang.value = getHighlightLanguage(props.file.name || '')
+      if (window.hljs && highlightLang.value && window.hljs.getLanguage(highlightLang.value)) {
+        try {
+          highlightedContent.value = window.hljs.highlight(props.file.code, { language: highlightLang.value }).value
+        } catch {
+          highlightedContent.value = escapeHtml(props.file.code)
+        }
+      } else {
+        highlightedContent.value = escapeHtml(props.file.code)
+      }
+      loading.value = false
+      return
+    }
+
+    if (!url) {
+      loading.value = false
+      error.value = 'No content available'
+      return
+    }
 
     if (cat === 'image' || cat === 'svg') {
       // For images/SVG, fetch as blob for object URL (also works for remote)

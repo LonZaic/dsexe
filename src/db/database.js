@@ -79,6 +79,10 @@ export async function initDB() {
 
     window[DB_KEY] = db
 
+    // Safe migration: add download_files to existing messages table
+    try { db.run('ALTER TABLE messages ADD COLUMN download_files TEXT DEFAULT \'[]\'') } catch {}
+    try { db.run('ALTER TABLE agent_messages ADD COLUMN download_files TEXT DEFAULT \'[]\'') } catch {}
+
     db.run(`
         CREATE TABLE IF NOT EXISTS
         conversations (

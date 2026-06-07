@@ -29,3 +29,5 @@ server/db/bbot.db*
 .env
 .vite
 .vite-temp
+server/workspace/downloads/
+FIX_SUMMARY.md

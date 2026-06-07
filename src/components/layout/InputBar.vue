@@ -1,17 +1,30 @@
 <template>
   <div class="input-bar-container">
-    <!-- File chips -->
-    <div v-if="files.length" class="file-chips">
+    <!-- File chips — Chat mode: per-type colored pills -->
+    <div v-if="mode === 'chat' && files.length" class="file-chips">
       <div
         v-for="(f, i) in files"
         :key="i"
         class="file-chip"
+        :style="chipStyle(f.name, f.type)"
         :title="f.name"
       >
-        <AppIcon :name="f.type?.startsWith('image') ? 'image' : 'file'" :size="14" />
+        <AppIcon :name="chipIcon(f.name)" :size="13" class="chip-icon" />
+        <span class="chip-type-badge" :style="badgeStyle(f.name, f.type)">{{ fileLabel(f.name, f.type) }}</span>
         <span class="file-chip-name">{{ f.name }}</span>
         <button class="file-chip-remove" @click="$emit('remove-file', i)">
-          <AppIcon name="x" :size="12" />
+          <AppIcon name="x" :size="11" />
+        </button>
+      </div>
+    </div>
+
+    <!-- File chips — Code mode: gray image count -->
+    <div v-if="mode === 'code' && files.length" class="file-chips code-chips">
+      <div class="file-chip code-chip">
+        <AppIcon name="image" :size="13" class="chip-icon" />
+        <span class="code-chip-text">图片 数量: {{ files.length }}</span>
+        <button class="file-chip-remove" @click="$emit('remove-file', 0)">
+          <AppIcon name="x" :size="11" />
         </button>
       </div>
     </div>
@@ -121,6 +134,7 @@
       ref="fileInput"
       type="file"
       multiple
+      :accept="accept || undefined"
       class="hidden-input"
       @change="onFileChange"
     />
@@ -131,6 +145,18 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import AppIcon from '../common/AppIcon.vue'
 import { useI18n } from '../../composables/useI18n.js'
+import { fileChipStyle, fileLabel } from '../../utils/fileStyles.js'
+import { getFileCategory, getFileIcon } from '../../utils/filePreview.js'
+
+// ═══ File chip helpers ═══
+function chipStyle(name, type) {
+  return { ...fileChipStyle(name, type), borderRadius: '12px', padding: '2px 8px' }
+}
+function badgeStyle(name, type) {
+  const s = fileChipStyle(name, type)
+  return { background: s.borderColor, color: s.color, fontSize: '9px', padding: '1px 5px', borderRadius: '4px', fontWeight: 600, letterSpacing: '0.3px', textTransform: 'uppercase' }
+}
+function chipIcon(name) { return getFileIcon(name) }
 
 const { t } = useI18n()
 
@@ -142,6 +168,8 @@ const props = defineProps({
   files: { type: Array, default: () => [] },
   thinkingDepth: { type: String, default: 'medium' },
   model: { type: String, default: 'deepseek-v4-flash' },
+  mode: { type: String, default: 'chat' },  // 'chat' | 'code'
+  accept: { type: String, default: '' },     // file input accept filter
 })
 
 const emit = defineEmits([
@@ -248,24 +276,42 @@ defineExpose({ textareaRef, fileInput })
 
 /* File chips */
 .file-chips {
-  display: flex; flex-wrap: wrap; gap: 4px;
+  display: flex; flex-wrap: wrap; gap: 5px;
   margin-bottom: 6px;
 }
 .file-chip {
-  display: flex; align-items: center; gap: 4px;
-  padding: 2px 8px;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  font-size: 11px; color: var(--text2); max-width: 200px;
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  background: var(--bg);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  font-size: 11px; color: var(--text2); max-width: 220px;
+  transition: border-color var(--transition-fast);
 }
-.file-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip:hover { border-color: rgba(255,255,255,0.2); }
+.chip-icon { flex-shrink: 0; color: var(--text-muted); }
+.chip-type-badge { flex-shrink: 0; }
+.file-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .file-chip-remove {
   display: flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border-radius: 50%;
-  color: var(--text3); flex-shrink: 0; transition: all .12s;
+  width: 16px; height: 16px; border-radius: 50%; border: none; background: transparent;
+  color: var(--text3); flex-shrink: 0; cursor: pointer; transition: all .12s;
 }
 .file-chip-remove:hover { background: rgba(248,81,73,0.12); color: var(--red); }
+
+/* Code mode chips */
+.code-chips .code-chip {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px 10px;
+  gap: 6px;
+}
+.code-chip-text {
+  font-size: 11px;
+  color: var(--text2);
+  white-space: nowrap;
+}
 
 /* Input row */
 .input-row {

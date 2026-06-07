@@ -18,9 +18,13 @@
                     :key="i"
                     class="file-chip"
                     :style="fileChipStyle(f.name, f.type)"
-                    :title="f.name"
+                    :title="f.name + (f.size ? ' (' + formatSize(f.size) + ')' : '')"
                 >
-                    <span class="file-chip-name" @click="previewFile(f)">{{ fileLabel(f.name, f.type) }}</span>
+                    <svg class="file-chip-icon" width="10" height="10" viewBox="0 0 24 24" fill="none">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="file-chip-name" @click="previewFile(f)">{{ f.name }}</span>
                 </div>
             </div>
 
@@ -149,25 +153,38 @@
                 <div class="bubble">{{ text }}</div>
             </template>
 
-            <!-- ═══ Download bar (AI generated files) ═══ -->
+            <!-- ═══ Download bar (AI generated files + code blocks) ═══ -->
             <div v-if="role === 'ai' && !streaming && allDownloads.length" class="download-bar">
-              <div
-                v-for="(f, i) in allDownloads"
-                :key="i"
-                class="download-chip"
-                :style="chipBorderStyle(f.name)"
-                :title="f.name + ' (' + formatDownloadSize(f.size) + ')'"
-              >
-                <AppIcon :name="getDownloadIcon(f.name)" :size="13" class="download-chip-icon" />
-                <span class="download-chip-name" @click="downloadOne(f)">{{ f.name }}</span>
-                <span class="download-chip-size">{{ formatDownloadSize(f.size) }}</span>
-                <button class="download-chip-btn" title="预览" @click.stop="$emit('previewFile', f)">
-                  <AppIcon name="eye" :size="14" />
-                </button>
-                <button class="download-chip-btn" title="下载" @click.stop="downloadOne(f)">
-                  <AppIcon name="download" :size="14" />
-                </button>
-              </div>
+                <div
+                    v-for="item in allDownloads"
+                    :key="item.type + '-' + item.index"
+                    class="download-row"
+                >
+                    <div class="download-info">
+                        <svg class="download-file-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M8 13h4M8 17h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                        </svg>
+                        <span class="download-name">{{ item.name }}</span>
+                        <span v-if="item.size" class="download-size">{{ formatSize(item.size) }}</span>
+                        <span v-if="downloadCountLabel(item)" class="download-count">{{ downloadCountLabel(item) }}</span>
+                    </div>
+                    <div class="download-actions">
+                        <button class="download-btn" title="预览" @click.stop="$emit('previewFile', { name: item.name, url: item.url, size: item.size, code: item.code, lang: item.lang })">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <path d="M2 12C2 12 6 5 12 5C18 5 22 12 22 12C22 12 18 19 12 19C6 19 2 12 2 12Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.5"/>
+                            </svg>
+                        </button>
+                        <button class="download-btn" :title="t('download')" @click="downloadItem(item)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- branch version navigator -->
@@ -226,8 +243,6 @@ import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { guessDeviceType, DEVICES } from '../utils/designPreview.js'
 import { useI18n } from '../composables/useI18n.js'
 import AgentProgress from './chat/AgentProgress.vue'
-import AppIcon from './common/AppIcon.vue'
-import { getFileCategory, getFileIcon, formatSize } from '../utils/filePreview.js'
 
 const { t } = useI18n()
 
@@ -253,39 +268,138 @@ const props = defineProps({
 
 defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick', 'previewFile'])
 
-// ═══ Download bar helpers ═══
-const allDownloads = computed(() => {
-  return (props.downloadFiles || []).filter(f => f && f.name)
-})
-
-function formatDownloadSize(bytes) { return formatSize(bytes) }
-
-function getDownloadIcon(name) { return getFileIcon(name) }
-
-function chipBorderStyle(name) {
-  const cat = getFileCategory(name)
-  const colors = {
-    image: 'rgba(148,163,184,0.3)',
-    svg: 'rgba(148,163,184,0.3)',
-    html: 'rgba(251,146,60,0.35)',
-    code: 'rgba(79,125,255,0.3)',
-    pdf: 'rgba(248,81,73,0.3)',
-    audio: 'rgba(52,211,153,0.35)',
-    video: 'rgba(167,139,250,0.35)',
-    binary: 'rgba(148,163,184,0.2)',
-    font: 'rgba(96,165,250,0.35)',
-  }
-  return { borderColor: colors[cat] || 'rgba(255,255,255,0.1)' }
+// ═══ Download bar — merge server files + auto-detected code blocks ═══
+const LANG_EXT = {
+    'javascript':'js','js':'js','jsx':'jsx','typescript':'ts','ts':'ts','tsx':'tsx',
+    'python':'py','py':'py','html':'html','css':'css','scss':'scss','sass':'sass','less':'less',
+    'json':'json','xml':'xml','yaml':'yml','yml':'yml','toml':'toml',
+    'markdown':'md','md':'md','bash':'sh','sh':'sh','shell':'sh','zsh':'sh','powershell':'ps1','ps1':'ps1',
+    'sql':'sql','java':'java','kotlin':'kt','swift':'swift',
+    'c':'c','cpp':'cpp','c++':'cpp','csharp':'cs','cs':'cs',
+    'go':'go','rust':'rs','rb':'rb','ruby':'rb','php':'php',
+    'vue':'vue','svelte':'svelte','mermaid':'mmd','mmd':'mmd','svg':'svg',
+    'dockerfile':'Dockerfile','docker':'Dockerfile','makefile':'Makefile',
+    'graphql':'graphql','gql':'graphql','r':'r','lua':'lua','perl':'pl','dart':'dart','scala':'scala',
+    'txt':'txt','text':'txt','ini':'ini','cfg':'cfg','env':'env','gitignore':'gitignore',
+    'diff':'diff','patch':'patch',
 }
 
-function downloadOne(f) {
-  if (!f?.url) return
-  const a = document.createElement('a')
-  a.href = f.url
-  a.download = f.name || 'file'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+const BASE_NAMES = {
+    'html':'index','css':'styles','scss':'styles','sass':'styles','less':'styles',
+    'js':'script','jsx':'component','ts':'script','tsx':'component',
+    'py':'script','python':'script','json':'data','svg':'image','mmd':'diagram',
+    'md':'document','sql':'query','sh':'script','bash':'script',
+    'vue':'component','svelte':'component','dockerfile':'Dockerfile','makefile':'Makefile',
+    'java':'Main','go':'main','rust':'main','rb':'script','ruby':'script',
+    'php':'index','cpp':'main','c':'main','cs':'Program','swift':'main','kt':'Main',
+    'yaml':'config','yml':'config','xml':'data','toml':'config',
+    'ini':'config','env':'env','gitignore':'gitignore','lua':'script','perl':'script',
+    'r':'script','dart':'main','scala':'Main','graphql':'schema','gql':'schema',
+    'powershell':'script','ps1':'script','diff':'changes','patch':'changes',
+}
+
+function detectLangFromContent(code) {
+    const trimmed = code.trim()
+    if (/^\s*<!DOCTYPE\s+html/i.test(trimmed) || /^\s*<html\b/i.test(trimmed)) return 'html'
+    if (/^\s*<\?xml/.test(trimmed) || /^\s*<svg\b/i.test(trimmed)) return 'svg'
+    if (/^\s*<[a-zA-Z][^>]*>[\s\S]*<\//.test(trimmed) && !/^[#./]/.test(trimmed)) return 'html'
+    if (/^\s*[\[{]/.test(trimmed) && /[\]}]\s*$/.test(trimmed) && !/[:=]\s/.test(trimmed.slice(0, 40))) return 'json'
+    if (/^\s*(def\s|class\s+\w+.*:|import\s+\w+|from\s+\w+\s+import|if\s+__name__\s*==|print\s*\(|elif\s|else:|except|with\s+|async\s+def)/m.test(trimmed)) return 'python'
+    if (/^\s*(import\s+(React|{)|export\s+(default\s+)?(function|class|const|let|var|interface|type)|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=)/m.test(trimmed)) return 'js'
+    if (/^\s*import\s+React/.test(trimmed) || /^\s*export\s+(default\s+)?function/.test(trimmed) || /<\w+[\s>]/.test(trimmed) && /function|const|import/.test(trimmed)) return 'jsx'
+    if (/^\s*[.#@][\w-]+\s*\{/.test(trimmed) && /[:;]\s/.test(trimmed)) return 'css'
+    if (/^\s*(SELECT|INSERT|UPDATE|DELETE|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)\b/i.test(trimmed)) return 'sql'
+    if (/^\s*#!/.test(trimmed) || /^\s*(apt|brew|npm|yarn|pip|git|docker|cd|ls|mkdir|echo|export)\s/.test(trimmed)) return 'sh'
+    if (/^\s*[\w-]+\s*:\s/.test(trimmed) && !/[{}();]/.test(trimmed.slice(0, 200)) && (trimmed.includes('\n') || trimmed.includes(':'))) return 'yaml'
+    if (/^#+\s/.test(trimmed)) return 'md'
+    if (/^\s*#include\s*[<"]/.test(trimmed)) return 'cpp'
+    if (/^\s*(public\s+class|package\s+\w+)/m.test(trimmed)) return 'java'
+    if (/^\s*package\s+main\b/m.test(trimmed) && /func\s/.test(trimmed)) return 'go'
+    if (/^\s*fn\s+main\b/.test(trimmed) || /^\s*use\s+\w+::/.test(trimmed)) return 'rust'
+    if (/^\s*(require\s+|def\s+\w+|class\s+\w+\s*<)/.test(trimmed) && /end\s*$/.test(trimmed)) return 'ruby'
+    if (/^\s*<\?php/.test(trimmed)) return 'php'
+    return null
+}
+
+const _DL_COUNTS_KEY = 'bbot_dl_counts'
+const downloadCounts = ref(_loadDlCounts())
+function _loadDlCounts() {
+    try { return JSON.parse(localStorage.getItem(_DL_COUNTS_KEY) || '{}') } catch { return {} }
+}
+function _saveDlCounts() {
+    try { localStorage.setItem(_DL_COUNTS_KEY, JSON.stringify(downloadCounts.value)) } catch {}
+}
+
+const codeBlocks = computed(() => {
+    if (props.role !== 'ai' || props.streaming || !props.text) return []
+    const text = props.text
+    const blocks = []
+    const regex = /```(\w*)\n([\s\S]*?)```/g
+    let match, idx = 0
+    while ((match = regex.exec(text)) !== null) {
+        let lang = (match[1] || '').toLowerCase().trim()
+        const code = match[2]
+        if (!lang) lang = detectLangFromContent(code) || ''
+        const ext = LANG_EXT[lang] || 'txt'
+        const base = BASE_NAMES[lang] || (lang || 'file')
+        const name = `${base}-${idx + 1}.${ext}`
+        blocks.push({ index: idx, lang, code, name, ext, type: 'code' })
+        idx++
+    }
+    return blocks
+})
+
+const allDownloads = computed(() => {
+    const items = []
+    for (let i = 0; i < (props.downloadFiles || []).length; i++) {
+        const f = props.downloadFiles[i]
+        items.push({ type: 'server', index: i, name: f.name, url: f.url, size: f.size })
+    }
+    for (const b of codeBlocks.value) {
+        items.push({ ...b, type: 'code' })
+    }
+    return items
+})
+
+function downloadItem(item) {
+    const key = `${props.msgId || 'msg'}-${item.type}-${item.index}`
+    if (item.type === 'server' && item.url) {
+        const a = document.createElement('a')
+        a.href = item.url
+        a.download = item.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+    } else if (item.type === 'code') {
+        const mime = item.lang === 'svg' ? 'image/svg+xml' : 'text/plain'
+        const blob = new Blob([item.code], { type: mime + ';charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = item.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+    }
+    const next = { ...downloadCounts.value }
+    next[key] = (next[key] || 0) + 1
+    downloadCounts.value = next
+    _saveDlCounts()
+}
+
+function downloadCountLabel(item) {
+    const key = `${props.msgId || 'msg'}-${item.type}-${item.index}`
+    const n = downloadCounts.value[key] || 0
+    if (n === 0) return ''
+    return t('downloaded') + n + t('times')
+}
+
+function formatSize(bytes) {
+    if (!bytes || bytes < 0) return ''
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
 async function previewFile(f) {
@@ -529,9 +643,10 @@ async function copyText() {
 .file-bar { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; justify-content: flex-end; }
 .file-chip {
     display: flex; align-items: center; gap: 3px;
-    padding: 3px 8px; font-size: 11px; border: 1px solid; height: 24px; border-radius: var(--radius-full);
+    padding: 2px 7px; font-size: 10px; border: 1px solid; height: 22px; border-radius: 10px;
 }
-.file-chip-name { cursor: pointer; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip-icon { flex-shrink: 0; color: inherit; opacity: 0.6; }
+.file-chip-name { cursor: pointer; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── stream cursor ─── */
 .stream-cursor { display: inline-block; width: 6px; height: 14px; margin-left: 2px; background: var(--primary); animation: blink 0.8s infinite; }
@@ -550,68 +665,82 @@ async function copyText() {
 .msg-actions button.del:hover { border-color: var(--red); color: var(--red); }
 
 /* ═══════════════════════════════
-   Download bar (AI generated files)
+   Download bar (AI generated files + code blocks)
    ═══════════════════════════════ */
 .download-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
 }
-.download-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255,255,255,0.12);
-  background: var(--bg);
-  transition: border-color var(--transition-fast), background var(--transition-fast);
-  max-width: 100%;
+.download-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg2);
+    transition: border-color 0.15s;
+    height: 28px;
 }
-.download-chip:hover {
-  background: var(--bg3);
-  border-color: rgba(255,255,255,0.22);
+.download-row:hover {
+    border-color: var(--accent-muted);
 }
-.download-chip-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
+.download-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
 }
-.download-chip-name {
-  font-size: var(--font-size-sm, 12px);
-  color: var(--text-primary);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
+.download-file-icon {
+    flex-shrink: 0;
+    color: var(--text3);
 }
-.download-chip-name:hover {
-  color: var(--accent);
-  text-decoration: underline;
+.download-name {
+    font-size: 12px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.download-chip-size {
-  font-size: var(--font-size-xs, 10px);
-  color: var(--text-muted);
-  flex-shrink: 0;
+.download-size {
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
-.download-chip-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
+.download-count {
+    font-size: 10px;
+    color: var(--text3);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
-.download-chip-btn:hover {
-  background: var(--bg-hover);
-  color: var(--accent);
+.download-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.download-btn {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text3);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.download-btn:hover {
+    background: var(--bg3);
+    color: var(--accent);
 }
 
 /* ═══════════════════════════════

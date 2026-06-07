@@ -108,6 +108,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
 `)
 
+// Safe migration: add download_files column to existing databases
+try { db.exec('ALTER TABLE messages ADD COLUMN download_files TEXT DEFAULT \'[]\'') } catch {}
+
 // ─── User queries ───
 const user = {
   create(id, name, password) {

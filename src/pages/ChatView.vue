@@ -45,6 +45,7 @@
                 :thinking-depth="thinkingDepth"
                 :model="agentMode ? 'deepseek-v4-pro' : store.model"
                 :placeholder="t('askPlaceholder')"
+                mode="chat"
                 @send="onInputSend"
                 @stop="stopGeneration"
                 @update:thinking-depth="thinkingDepth = $event"
@@ -104,9 +105,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '../store/chatStore.js'
 import { useDebounce } from '../composables/useDebounce.js'
 import { saveFile, loadFile } from '../utils/fileDB.js'
-import { extractFileContent } from '../utils/extractFile.js'
+import { extractFileContent, isTextFile, isImageFile } from '../utils/extractFile.js'
 import { fileChipStyle, fileLabel } from '../utils/fileStyles.js'
 import { getEmailTools, classifyIntent } from '../utils/functionCalling.js'
+import { ocrForContext } from '../utils/ocr.js'
 import { getApiHeaders } from '../utils/apiHeaders.js'
 
 import { GIFEncoder, quantize, applyPalette } from 'gifenc'
@@ -128,51 +130,48 @@ import { useI18n } from '../composables/useI18n.js'
 // ═══ DSML / Claude-style XML Tool Call Parser ═══
 // DeepSeek models sometimes output Claude-style XML tool invocations as text
 // instead of using the proper API tool_calls field. Parse and strip them.
+// Handles both formats:
+//   1. <invoke name="tool"><parameter .../></invoke>
+//   2. <tool_name><parameter ...></tool_name> (bare tags, no invoke wrapper)
 function parseXmlToolCalls(text) {
     if (!text) return { cleanText: text, toolCalls: [] }
 
     const toolCalls = []
-    const invokeRegex = /<invoke\s+name="([^"]+)"\s*>([\s\S]*?)<\/invoke>/g
-    let invokeMatch
     const usedRanges = []
 
-    while ((invokeMatch = invokeRegex.exec(text)) !== null) {
-        const toolName = invokeMatch[1]
-        const innerContent = invokeMatch[2]
-        usedRanges.push({ start: invokeMatch.index, end: invokeMatch.index + invokeMatch[0].length })
+    // Known tool names
+    const KNOWN_TOOLS = ['save_file','svg_to_image','create_zip','create_gif','create_document','create_pdf','create_audio','convert','web_search','web_fetch','get_weather']
 
-        const args = {}
-        const paramRegex = /<parameter\s+name="([^"]+)"\s+string="(true|false)"\s*>([\s\S]*?)<\/parameter>/g
-        let paramMatch
-        while ((paramMatch = paramRegex.exec(innerContent)) !== null) {
-            const paramName = paramMatch[1]
-            const isString = paramMatch[2] === 'true'
-            let value = paramMatch[3]
-
-            if (!isString) {
-                try {
-                    const parsed = JSON.parse(value)
-                    if (Array.isArray(parsed)) {
-                        // Handle [{type:"string", value:"..."}, ...] format
-                        value = parsed.map(item => item?.value ?? item)
-                    } else {
-                        value = parsed
-                    }
-                } catch {
-                    // If JSON parse fails, use as-is (number, boolean)
-                }
-            }
-            args[paramName] = value
-        }
-
+    // Pattern 1: <invoke name="tool">...</invoke>
+    const invokeRegex = /<invoke\s+name="([^"]+)"\s*>([\s\S]*?)<\/invoke>/g
+    let m
+    while ((m = invokeRegex.exec(text)) !== null) {
+        const toolName = m[1]
+        const inner = m[2]
+        usedRanges.push({ start: m.index, end: m.index + m[0].length })
+        const args = parseXmlParams(inner)
         if (toolName) {
             toolCalls.push({
                 id: 'xml_' + toolName + '_' + Date.now() + '_' + toolCalls.length,
                 type: 'function',
-                function: {
-                    name: toolName,
-                    arguments: JSON.stringify(args)
-                }
+                function: { name: toolName, arguments: JSON.stringify(args) }
+            })
+        }
+    }
+
+    // Pattern 2: <tool_name> (bare tags, may be unclosed)
+    for (const toolName of KNOWN_TOOLS) {
+        const tagRegex = new RegExp(`<${toolName}\\b[^>]*>([\\s\\S]*?)(?:<\\/${toolName}>|$)`, 'g')
+        while ((m = tagRegex.exec(text)) !== null) {
+            // Skip if already covered by invoke match
+            if (usedRanges.some(r => r.start <= m.index && r.end >= m.index + m[0].length)) continue
+            const inner = m[1]
+            usedRanges.push({ start: m.index, end: m.index + m[0].length })
+            const args = parseXmlParams(inner)
+            toolCalls.push({
+                id: 'xml2_' + toolName + '_' + Date.now() + '_' + toolCalls.length,
+                type: 'function',
+                function: { name: toolName, arguments: JSON.stringify(args) }
             })
         }
     }
@@ -188,12 +187,31 @@ function parseXmlToolCalls(text) {
     return { cleanText, toolCalls }
 }
 
+function parseXmlParams(xml) {
+    const args = {}
+    const paramRegex = /<parameter\s+name="([^"]+)"\s+string="(true|false)"\s*>([\s\S]*?)<\/parameter>/g
+    let pm
+    while ((pm = paramRegex.exec(xml)) !== null) {
+        const paramName = pm[1]
+        const isString = pm[2] === 'true'
+        let value = pm[3]
+        if (!isString) {
+            try {
+                const parsed = JSON.parse(value)
+                value = Array.isArray(parsed) ? parsed.map(item => item?.value ?? item) : parsed
+            } catch {}
+        }
+        args[paramName] = value
+    }
+    return args
+}
+
 // Legacy DSML stripper — fallback for edge cases parseXmlToolCalls misses
 function stripDSML(text) {
     if (!text) return text
     let result = text.replace(/<[|｜]{2}\s*DSML\s*[|｜]{2}[\s\S]*?<\/[|｜]{2}\s*DSML\s*[|｜]{2}>/gi, '')
     result = result.replace(/<[|｜]{2}\s*DSML\s*[|｜]{2}[\s\S]*$/gi, '')
-    result = result.replace(/<\/?\s*(function_calls|invoke|parameter|DSML)[^>]*>/gi, '')
+    result = result.replace(/<\/?\s*(function_calls|invoke|parameter|DSML\b|save_file|create_zip|svg_to_image|create_gif|create_document|create_pdf|create_audio|convert|web_search|web_fetch|get_weather)[^>]*>/gi, '')
     result = result.replace(/\n{3,}/g, '\n\n')
     return result.trim()
 }
@@ -489,6 +507,12 @@ async function onFiles(e) {
         let content = ''
         if (cat === 'image') {
             content = await readAsDataURL(f)
+            // Start OCR in background — result available before send if fast enough
+            const ocrPromise = ocrForContext(content, f.name)
+            ocrPromise.then(ocrText => {
+                const idx = pendingFiles.value.findIndex(p => p.key === key)
+                if (idx >= 0) pendingFiles.value[idx].ocrText = ocrText
+            }).catch(() => {})
         } else if (isTextLike(f.name)) {
             content = await readAsText(f)
         } else {
@@ -513,8 +537,7 @@ function detectCat(f) {
 }
 
 function isTextLike(name) {
-    const ext = name.split('.').pop()?.toLowerCase()
-    return ['txt','js','ts','py','html','css','json','xml','md','yml','yaml','sh','bat','c','cpp','h','java','go','rs','rb','php','sql','csv','log','ini','cfg','toml'].includes(ext)
+    return isTextFile(name)
 }
 
 function readAsText(file) {
@@ -598,23 +621,17 @@ async function send() {
     const text = inputText.value.trim()
     const hasFiles = pendingFiles.value.length > 0
     if (!text && !hasFiles) return
-    // Only block if THIS conversation's agent is running
     if (agentRunningMap[store.currentId]) return
-    // Reset textarea height
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
 
-    // Agent mode ON → always use agent
     if (getAgentMode()) {
         await sendToAgent(text)
         return
     }
 
-    // Auto-detect: "continue" after agent → re-engage agent
     const isContinuation = /^(继续|接着|继续做|接着做|go on|continue|next|下一步|还没|没有完成|没完成|还没做完|继续完成|还有|接着干|继续干)/i.test(text)
-    // Check last 3 messages for agent activity (not just last one)
     const recentMsgs = store.visibleMessages.slice(-3)
     const wasAgentRecently = recentMsgs.some(m => (m._agentEvents && m._agentEvents.length > 0) || (m.text && m.text.includes('[Agent]')))
-    // Also check if last user message was an agent task
     const lastUserMsgs = store.visibleMessages.filter(m => m.role === 'user')
     const lastUserWasAgent = lastUserMsgs.length > 0 && lastUserMsgs[lastUserMsgs.length-1].text?.startsWith('[Agent]')
     if (isContinuation && (wasAgentRecently || lastUserWasAgent)) {
@@ -622,16 +639,38 @@ async function send() {
         return
     }
 
-    // Classify intent via function calling before deciding flow
+    // ═══ Show user message INSTANTLY (before classifyIntent API call) ═══
+    const files = pendingFiles.value.map(f => ({
+        name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '', ocrText: f.ocrText || '',
+    }))
+    inputText.value = ''
+    pendingFiles.value = ([])
+    if (textareaRef.value) textareaRef.value.style.height = 'auto'
+
+    // Reset token counters
+    _skipTokenSave = true
+    tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0
+    _skipTokenSave = false
+
+    const displayText = text
+    store.addUserMessage(displayText, files)
+    scrollToUserMsg()
+
+    // Title generation
+    const conv = store.conversations.find(c => c.id === store.currentId)
+    if (!conv || !conv.title || conv.title === '新对话') {
+        generateTitle(text || (files[0]?.name || '文件'), store.currentId)
+    }
+
+    // Classify intent (async — message already visible)
     try {
         const context = store.visibleMessages.slice(-4)
         const result = await classifyIntent(text, store.apikey, context)
         if (result.intent === 'design') {
-            inputText.value = ''
-            const files = pendingFiles.value.map(f => ({
-                name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '',
-            }))
-            pendingFiles.value = ([])
+            // Mark last user message for design flow
+            const userMsgs = (store.messagesMap[store.currentId] || []).filter(m => m.role === 'user')
+            const lastUserMsg = userMsgs[userMsgs.length - 1]
+            if (lastUserMsg) lastUserMsg._apiText = text
             showDesignPicker(text, result.summary, files)
             return
         }
@@ -639,7 +678,7 @@ async function send() {
         console.warn('[classify] failed, fallback to normal chat:', e.message)
     }
 
-    _doSend(text)
+    await callStreamAPI(files)
 }
 
 // Show device picker after AI confirms design intent
@@ -866,7 +905,7 @@ async function _doSend(text) {
     _skipTokenSave = false
 
     const files = pendingFiles.value.map(f => ({
-        name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '',
+        name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '', ocrText: f.ocrText || '',
     }))
 
     const deviceInfo = selectedDevice.value
@@ -1004,14 +1043,19 @@ function buildMessages(tempId) {
     // First pass: build all message objects with token estimates
     const allBuilt = []
     for (const m of prevMsgs) {
-        // Include all messages normally — skipping fallback messages creates
-        // a conversation gap that actually poisons the context (cascading failure).
+        // Include all messages normally
         let content = ''
         if (m.role === 'user') {
             content = m._apiText || m.text || ''
             for (const f of (m.files || [])) {
                 if (f.type?.startsWith('image/')) {
-                    content += `\n[图片: ${f.name}]`
+                    // Include OCR text if available, otherwise just filename placeholder
+                    const ocrText = f.ocrText || ''
+                    if (ocrText) {
+                        content += `\n${ocrText}`
+                    } else {
+                        content += `\n[图片: ${f.name}]`
+                    }
                 } else if (f.content) {
                     content += `\n[文件: ${f.name}]\n${f.content}`
                 } else {

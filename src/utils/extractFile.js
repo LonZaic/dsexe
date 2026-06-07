@@ -51,10 +51,62 @@ export async function extractFileContent(file) {
     const ext = (file.name || '').split('.').pop()?.toLowerCase()
     const buffer = await file.arrayBuffer()
     try {
-        if (ext === 'docx') return await extractDocx(buffer)
-        if (ext === 'pptx') return await extractPptx(buffer)
-        if (ext === 'xlsx') return await extractXlsx(buffer)
+        if (ext === 'docx' || ext === 'doc') return await extractDocx(buffer)
+        if (ext === 'pptx' || ext === 'ppt') return await extractPptx(buffer)
+        if (ext === 'xlsx' || ext === 'xls') return await extractXlsx(buffer)
         if (ext === 'pdf')  return await extractPdf(buffer)
     } catch { return '' }
     return null
+}
+
+/**
+ * Check if a filename is a text-based file that can be read directly
+ * Covers 80+ common text formats — code, config, markup, data
+ */
+export function isTextFile(filename) {
+    const ext = (filename || '').split('.').pop()?.toLowerCase()
+    if (!ext) return false
+    const textExts = new Set([
+        // Code
+        'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'pyw',
+        'css', 'scss', 'sass', 'less', 'styl',
+        'html', 'htm', 'xhtml', 'svg', 'xml', 'xsl', 'xslt',
+        'json', 'jsonc', 'json5', 'geojson',
+        'md', 'mdx', 'markdown', 'rst', 'adoc',
+        'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf', 'env',
+        'sh', 'bash', 'zsh', 'fish', 'bat', 'cmd', 'ps1',
+        'c', 'cpp', 'cc', 'cxx', 'h', 'hpp', 'hh', 'hxx',
+        'java', 'kt', 'kts', 'scala', 'groovy',
+        'go', 'rs', 'rb', 'php', 'pl', 'pm', 'tcl',
+        'swift', 'r', 'jl', 'lua', 'dart', 'nim', 'zig',
+        'sql', 'prisma', 'graphql', 'cypher',
+        'vue', 'svelte', 'astro', 'solid',
+        'txt', 'log', 'csv', 'tsv', 'psv',
+        'diff', 'patch',
+        'tex', 'latex', 'bib', 'sty',
+        'proto', 'thrift', 'avsc',
+        'dockerfile', 'makefile', 'cmake', 'gitignore', 'editorconfig',
+        'nginx', 'haproxy',
+        'properties', 'gradle', 'lock',
+        'ino', 'pde', // Arduino
+    ])
+    if (textExts.has(ext)) return true
+    // Handle dotfiles and special names
+    const name = (filename || '').toLowerCase()
+    if (name === 'dockerfile' || name === 'makefile' || name === 'cmakelists.txt' ||
+        name === 'jenkinsfile' || name === 'vagrantfile' || name === '.gitignore' ||
+        name === '.editorconfig' || name === '.env' || name === '.npmrc') return true
+    return false
+}
+
+/**
+ * Check if a filename is an image
+ */
+export function isImageFile(filename) {
+    const ext = (filename || '').split('.').pop()?.toLowerCase()
+    const imageExts = new Set([
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp',
+        'svg', 'ico', 'tiff', 'tif', 'avif', 'apng', 'heic', 'heif'
+    ])
+    return imageExts.has(ext)
 }
