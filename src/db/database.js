@@ -508,6 +508,8 @@ export function saveItem(collectionId, msgJson, preview) {
   db.run('INSERT INTO saved_items (collection_id, msg_json, preview) VALUES (?, ?, ?)',
     [collectionId || null, msgJson, preview || ''])
   saveDB()
+  const r = db.exec("SELECT last_insert_rowid()")
+  return r[0]?.values[0]?.[0] ?? null
 }
 
 export function deleteSavedItem(id) {
@@ -537,6 +539,21 @@ export function moveSavedItem(itemId, newCollectionId) {
 export function findCollectionByName(name) {
   const stmt = db.prepare('SELECT * FROM collections WHERE LOWER(name) = LOWER(?)')
   stmt.bind([name.trim()])
+  let result = null
+  if (stmt.step()) result = stmt.getAsObject()
+  stmt.free()
+  return result || null
+}
+
+export function updateSavedItemContent(id, msgJson, preview) {
+  db.run('UPDATE saved_items SET msg_json = ?, preview = ? WHERE id = ?',
+    [msgJson, preview || '', id])
+  saveDB()
+}
+
+export function getSavedItemById(id) {
+  const stmt = db.prepare('SELECT * FROM saved_items WHERE id = ?')
+  stmt.bind([id])
   let result = null
   if (stmt.step()) result = stmt.getAsObject()
   stmt.free()

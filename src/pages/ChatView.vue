@@ -104,6 +104,38 @@
               </Transition>
             </Teleport>
 
+            <!-- Save confirmation dialog (AI generated → user approves) -->
+            <Teleport to="body">
+              <Transition name="fade">
+                <div v-if="saveConfirmVisible" class="save-confirm-overlay" @click.self="onSaveConfirmRetry">
+                  <div class="save-confirm-box">
+                    <div class="save-confirm-header">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span>确认收藏到「{{ saveConfirmCollection }}」</span>
+                    </div>
+                    <div class="save-confirm-preview markdown-body" v-html="renderPreview(saveConfirmContent)"></div>
+                    <div class="save-confirm-actions">
+                      <button class="save-confirm-btn retry" @click="onSaveConfirmRetry">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                          <path d="M3 5v5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        不满意，重来
+                      </button>
+                      <button class="save-confirm-btn approve" @click="onSaveConfirmYes">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                          <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        满意，收藏
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Transition>
+            </Teleport>
+
             <!-- Image preview overlay -->
             <div v-if="previewSrc" class="preview-overlay" @click.self="previewSrc = null">
                 <button class="preview-close" @click="previewSrc = null">
@@ -157,7 +189,7 @@ import AppIcon from '../components/common/AppIcon.vue'
 
 import { useI18n } from '../composables/useI18n.js'
 import { confirmDelete } from '../utils/confirm.js'
-import { getCollections, saveItem, findCollectionByName } from '../db/database.js'
+import { getCollections, getAllSavedItems, saveItem, findCollectionByName, createCollection, renameCollection, updateSavedItemContent, moveSavedItem, deleteSavedItem } from '../db/database.js'
 
 // ═══ DSML / Claude-style XML Tool Call Parser ═══
 // DeepSeek models sometimes output Claude-style XML tool invocations as text
@@ -296,6 +328,48 @@ function onToolPickerCancel() {
     _toolPickerResolve(null)
     _toolPickerResolve = null
   }
+}
+
+// ═══ Save confirmation dialog (AI generated content → user approves) ═══
+const saveConfirmVisible = ref(false)
+const saveConfirmContent = ref('')
+const saveConfirmPreview = ref('')
+const saveConfirmCollection = ref('')
+let _saveConfirmResolve = null
+
+function showSaveConfirm(collectionName, content, preview) {
+  return new Promise((resolve) => {
+    saveConfirmCollection.value = collectionName
+    saveConfirmContent.value = content
+    saveConfirmPreview.value = preview
+    saveConfirmVisible.value = true
+    _saveConfirmResolve = resolve
+  })
+}
+
+function onSaveConfirmYes() {
+  saveConfirmVisible.value = false
+  if (_saveConfirmResolve) { _saveConfirmResolve(true); _saveConfirmResolve = null }
+}
+
+function onSaveConfirmRetry() {
+  saveConfirmVisible.value = false
+  if (_saveConfirmResolve) { _saveConfirmResolve(false); _saveConfirmResolve = null }
+}
+
+// ═══ Track last saved item (for move/update/delete by AI) ═══
+let _lastSavedItemId = null
+
+function renderPreview(content) {
+  if (!content) return '<span style="color:var(--text3)">(无内容)</span>'
+  const text = content.slice(0, 600)
+  // Simple markdown: bold, italic, code, line breaks
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
 }
 
 const MODELS = [
@@ -1074,6 +1148,9 @@ function buildMessages(tempId) {
     // File generation tools — always available
     sysContent += '\n\n## 文件生成\n你有以下文件工具可用：save_file(保存文本文件)、svg_to_image(SVG转PNG/JPG/WebP/GIF)、create_zip(多文件打包ZIP)、create_gif(多帧动画GIF)、create_document(Word/Excel/PPT/PDF)、create_pdf(直接生成PDF)、create_audio(WAV音频)、convert(格式转换)。**当用户要求下载文件、保存代码、生成文档、打包项目、画图转图片时，必须调用对应工具。** 文件生成后下载条会自动出现在界面中，你只需简要告诉用户文件已准备好，严禁输出任何下载链接或URL。'
 
+    // Collection system — preferred for saving text content
+    sysContent += '\n\n## 收藏系统\n你有 save_to_collection 工具可以将文字内容存入用户的收藏夹。**当用户要求"收藏"、"存起来"、"保存这段对话"、"存到XX收藏夹"时，必须调用此工具，严禁口头说"已存好"但不调工具。** 此外还有 rename_collection、move_last_saved、update_last_saved、delete_last_saved、list_collections 等工具管理收藏。**对于文本内容的保存，优先用收藏系统而非生成下载文件。**'
+
     // Weather tool — real data from Open-Meteo
     sysContent += '\n\n## 天气查询\n有 get_weather(city, days) 工具。**任何天气相关的问题必须调用此工具**——它能获取真实的实时天气数据。返回的是结构化天气数据（日期/天气/温度/降水概率/风速），你必须用 Markdown 表格呈现，并配上自然语言总结。绝对不要用 web_search 查天气。'
 
@@ -1613,23 +1690,87 @@ For .pptx, use:
             type: 'function',
             function: {
                 name: 'save_to_collection',
-                description: `将对话内容保存到用户的收藏夹。当用户说"收藏"、"保存这段"、"存起来"、"帮我收藏"等要求收藏内容时调用。
-- 如果用户明确说了收藏夹名称（如"收藏到代码收藏夹"），collection_name 填那个名称
-- 如果用户没说收藏夹名称（如"收藏一下"），collection_name 留空字符串，系统会弹出选择器让用户选
-- content 传入要收藏的完整内容，用 Markdown 格式整理好`,
+                description: `【必须调用此工具才能真正保存，禁止口头说"已存好"但不调工具】
+将内容保存到用户的收藏夹。当用户要求收藏、保存、存起来、创建收藏夹时，你必须调用此工具执行实际操作。
+- 用户说"存到XX"或"收藏到XX"→ collection_name填名称，content填完整内容。夹不存在会自动创建
+- 用户说"创建一个XX收藏夹"→ collection_name填名称，content留空
+- 用户说"收藏一下"没指定夹→ collection_name留空，系统弹选择器让用户选
+- 你新生成内容需用户确认时→ confirm设为true，系统弹出"满意收藏/不满意重来"按钮`,
                 parameters: {
                     type: 'object',
                     properties: {
-                        collection_name: { type: 'string', description: '收藏夹名称，用户指定了才填，没指定就留空字符串 ""' },
+                        collection_name: { type: 'string', description: '收藏夹名称，没指定就留空 ""' },
                         content: { type: 'string', description: '要收藏的完整内容（Markdown格式）' },
-                        preview: { type: 'string', description: '内容前30字作为预览' }
+                        preview: { type: 'string', description: '内容前30字作为预览' },
+                        confirm: { type: 'boolean', description: '是否需要用户确认后再收藏。AI新生成的内容设true' }
                     },
                     required: ['content']
                 }
             }
         }]
+        // Collection management tools
+        const renameCollectionTool = [{
+            type: 'function',
+            function: {
+                name: 'rename_collection',
+                description: '重命名收藏夹。当用户说"把XX收藏夹改名为YY"、"重命名XX为YY"时调用。',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        old_name: { type: 'string', description: '当前收藏夹名称' },
+                        new_name: { type: 'string', description: '新名称' }
+                    },
+                    required: ['old_name', 'new_name']
+                }
+            }
+        }]
+        const moveLastSavedTool = [{
+            type: 'function',
+            function: {
+                name: 'move_last_saved',
+                description: `将最近一次收藏的内容移动到另一个收藏夹。当用户说"不要存到XXX，存到YYY"、"把这个移到ZZZ收藏夹"、"换到另一个收藏夹"时调用。`,
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        to_collection: { type: 'string', description: '目标收藏夹名称（不存在会自动创建）' }
+                    },
+                    required: ['to_collection']
+                }
+            }
+        }]
+        const updateLastSavedTool = [{
+            type: 'function',
+            function: {
+                name: 'update_last_saved',
+                description: `更新最近一次收藏的内容。当用户说"刚刚存的总结不满意，帮我改一下"、"把收藏的内容更新为..."时调用。先输出新内容给用户看，再调此工具保存。`,
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        content: { type: 'string', description: '更新后的完整内容（Markdown格式）' },
+                        preview: { type: 'string', description: '新的前30字预览' }
+                    },
+                    required: ['content']
+                }
+            }
+        }]
+        const deleteLastSavedTool = [{
+            type: 'function',
+            function: {
+                name: 'delete_last_saved',
+                description: `删除最近一次收藏的内容。当用户说"刚刚那个收藏不要了"、"删掉刚才的收藏"时调用。`,
+                parameters: { type: 'object', properties: {}, required: [] }
+            }
+        }]
+        const listCollectionsTool = [{
+            type: 'function',
+            function: {
+                name: 'list_collections',
+                description: `列出用户所有收藏夹及其中收藏数量。当用户问"我有哪些收藏夹"、"收藏夹里有什么"时调用。`,
+                parameters: { type: 'object', properties: {}, required: [] }
+            }
+        }]
         // No design tool in normal chat — classifyIntent() pre-checks design intent before this
-        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool, ...saveFileTool, ...svgToImageTool, ...createZipTool, ...convertTool, ...createDocTool, ...createAudioTool, ...createGifTool, ...createPdfTool, ...saveToCollectionTool]
+        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool, ...saveFileTool, ...svgToImageTool, ...createZipTool, ...convertTool, ...createDocTool, ...createAudioTool, ...createGifTool, ...createPdfTool, ...saveToCollectionTool, ...renameCollectionTool, ...moveLastSavedTool, ...updateLastSavedTool, ...deleteLastSavedTool, ...listCollectionsTool]
 
         const dw = device?.w || 375
         const dh = device?.h || 667
@@ -1745,6 +1886,16 @@ For .pptx, use:
                     toolResult = await handleGetWeather(args)
                 } else if (toolName === 'save_to_collection') {
                     toolResult = await handleSaveToCollection(args, tempId)
+                } else if (toolName === 'rename_collection') {
+                    toolResult = handleRenameCollection(args)
+                } else if (toolName === 'move_last_saved') {
+                    toolResult = handleMoveLastSaved(args)
+                } else if (toolName === 'update_last_saved') {
+                    toolResult = handleUpdateLastSaved(args)
+                } else if (toolName === 'delete_last_saved') {
+                    toolResult = handleDeleteLastSaved()
+                } else if (toolName === 'list_collections') {
+                    toolResult = handleListCollections()
                 } else if (executors[toolName]) {
                     toolResult = await executors[toolName](args)
                 } else {
@@ -2252,42 +2403,104 @@ async function handleSaveToCollection(args, tempId) {
   const content = args.content || ''
   const preview = args.preview || content.replace(/\n/g, ' ').slice(0, 30)
   const colName = (args.collection_name || '').trim()
+  const needsConfirm = args.confirm === true || args.confirm === 'true'
 
-  // User specified a collection name — try to find it
+  // User specified a collection name — find or auto-create
   if (colName) {
-    const found = findCollectionByName(colName)
-    if (found) {
-      saveItem(found.id, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
-      return JSON.stringify({ status: 'ok', collection: found.name, message: `已收藏到「${found.name}」` })
-    } else {
-      const all = getCollections()
-      return JSON.stringify({
-        status: 'not_found',
-        name: colName,
-        available: all.map(c => c.name),
-        message: `未找到收藏夹「${colName}」，现有收藏夹：${all.map(c => '「' + c.name + '」').join('、') || '无'}`
-      })
+    let found = findCollectionByName(colName)
+    const isNew = !found
+    if (isNew) {
+      const newId = createCollection(colName)
+      found = { id: newId, name: colName }
     }
+    // No content — just create folder
+    if (!content.trim()) {
+      return JSON.stringify({ status: 'ok', collection: found.name, created: isNew, message: isNew ? `已创建收藏夹「${found.name}」` : `收藏夹「${found.name}」已存在` })
+    }
+    // Confirmation needed — show approve/retry buttons
+    if (needsConfirm) {
+      const approved = await showSaveConfirm(found.name, content, preview)
+      if (!approved) {
+        return JSON.stringify({ status: 'retry', message: '用户不满意当前内容，请根据反馈重新生成后再调用此工具保存。' })
+      }
+    }
+    _lastSavedItemId = saveItem(found.id, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
+    const action = isNew ? '创建并收藏到' : '已收藏到'
+    return JSON.stringify({ status: 'ok', collection: found.name, message: `${action}「${found.name}」` })
   }
 
   // No collection name — show picker
   const all = getCollections()
   const collections = all.map(c => ({ id: c.id, name: c.name }))
 
-  // Wait for user to pick a collection via the UI
   const chosenColId = await showToolPicker(collections, content, preview)
 
   if (chosenColId === null) {
-    // User cancelled
     return JSON.stringify({ status: 'cancelled', message: '用户取消了收藏' })
   }
 
-  // User picked a collection — save it
   const chosenName = chosenColId
     ? all.find(c => c.id === chosenColId)?.name || '收藏夹'
     : '全局收藏'
-  saveItem(chosenColId, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
+  _lastSavedItemId = saveItem(chosenColId, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
   return JSON.stringify({ status: 'ok', collection: chosenName, message: `已收藏到「${chosenName}」` })
+}
+
+// ═══ Collection management tool handlers ═══
+
+function handleRenameCollection(args) {
+  const oldName = (args.old_name || '').trim()
+  const newName = (args.new_name || '').trim()
+  if (!oldName || !newName) return JSON.stringify({ status: 'error', message: '请提供旧名称和新名称' })
+  const found = findCollectionByName(oldName)
+  if (!found) return JSON.stringify({ status: 'error', message: `未找到收藏夹「${oldName}」` })
+  if (findCollectionByName(newName)) return JSON.stringify({ status: 'error', message: `收藏夹「${newName}」已存在` })
+  renameCollection(found.id, newName)
+  return JSON.stringify({ status: 'ok', message: `已将「${oldName}」重命名为「${newName}」` })
+}
+
+function handleMoveLastSaved(args) {
+  if (!_lastSavedItemId) return JSON.stringify({ status: 'error', message: '没有最近收藏的记录可移动' })
+  const toName = (args.to_collection || '').trim()
+  if (!toName) return JSON.stringify({ status: 'error', message: '请指定目标收藏夹名称' })
+  let target = findCollectionByName(toName)
+  if (!target) {
+    const newId = createCollection(toName)
+    target = { id: newId, name: toName }
+  }
+  moveSavedItem(_lastSavedItemId, target.id)
+  return JSON.stringify({ status: 'ok', message: `已移至「${target.name}」` })
+}
+
+function handleUpdateLastSaved(args) {
+  if (!_lastSavedItemId) return JSON.stringify({ status: 'error', message: '没有最近收藏的记录可更新' })
+  const content = args.content || ''
+  const preview = args.preview || content.replace(/\n/g, ' ').slice(0, 30)
+  updateSavedItemContent(_lastSavedItemId, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
+  return JSON.stringify({ status: 'ok', message: '收藏内容已更新' })
+}
+
+function handleDeleteLastSaved() {
+  if (!_lastSavedItemId) return JSON.stringify({ status: 'error', message: '没有最近收藏的记录可删除' })
+  deleteSavedItem(_lastSavedItemId)
+  _lastSavedItemId = null
+  return JSON.stringify({ status: 'ok', message: '已删除最近收藏' })
+}
+
+function handleListCollections() {
+  const cols = getCollections()
+  const all = getAllSavedItems ? getAllSavedItems() : []
+  const list = cols.map(c => {
+    const count = all.filter(i => i.collection_id === c.id).length
+    return `「${c.name}」(${count}条)`
+  }).join('、')
+  const globalCount = all.filter(i => !i.collection_id).length
+  const globalStr = globalCount > 0 ? `全局收藏(${globalCount}条)` : ''
+  return JSON.stringify({
+    status: 'ok',
+    collections: cols.map(c => ({ name: c.name, id: c.id })),
+    message: list ? `你的收藏夹：${list}${globalStr ? '、' + globalStr : ''}` : '你还没有收藏夹'
+  })
 }
 
 async function handleWebFetch(url) {
@@ -2916,6 +3129,59 @@ async function generateTitle(userMsg, convId) {
   cursor: pointer; transition: all 0.12s ease;
 }
 .tool-picker-cancel:hover { background: var(--bg3); color: var(--text); }
+
+/* Save confirmation dialog */
+.save-confirm-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.save-confirm-box {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px;
+  width: 500px; max-width: 94vw; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+  animation: pickerSlideUp .22s cubic-bezier(0.16,1,0.3,1);
+}
+.save-confirm-header {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 600; color: var(--text);
+  margin-bottom: 14px; flex-shrink: 0;
+}
+.save-confirm-preview {
+  flex: 1; overflow-y: auto; max-height: 50vh;
+  padding: 14px; border-radius: var(--radius);
+  background: var(--bg2); border: 1px solid var(--border);
+  font-size: 13px; line-height: 1.6; color: var(--text);
+  margin-bottom: 16px;
+}
+.save-confirm-preview code {
+  background: var(--bg3); padding: 1px 5px; border-radius: 3px;
+  font-family: var(--font-mono); font-size: 12px;
+}
+.save-confirm-preview strong { font-weight: 600; color: var(--text); }
+.save-confirm-actions {
+  display: flex; gap: 10px; flex-shrink: 0;
+}
+.save-confirm-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 0; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; font-family: inherit;
+  cursor: pointer; transition: all 0.12s ease; border: 1px solid var(--border);
+}
+.save-confirm-btn.retry {
+  background: var(--bg2); color: var(--text2);
+}
+.save-confirm-btn.retry:hover {
+  background: var(--bg3); color: var(--text); border-color: var(--text3);
+}
+.save-confirm-btn.approve {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.save-confirm-btn.approve:hover {
+  background: var(--accent-hover);
+}
 
 .fade-enter-active { transition: opacity 0.2s ease; }
 .fade-leave-active { transition: opacity 0.15s ease; }
