@@ -185,6 +185,23 @@
                         </button>
                     </div>
                 </div>
+                <!-- Bulk actions: only show when 2+ files -->
+                <div v-if="allDownloads.length >= 2" class="download-bulk">
+                    <button class="download-bulk-btn" @click.stop="downloadAll">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        一键下载
+                    </button>
+                    <button v-if="!hasZip" class="download-bulk-btn" @click.stop="$emit('askZip')">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 8v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8l3 4h5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 11v4M10 13h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                        </svg>
+                        一键压缩
+                    </button>
+                </div>
             </div>
 
             <!-- branch version navigator -->
@@ -298,7 +315,7 @@ const props = defineProps({
     downloadFiles: { type: Array, default: () => [] },
 })
 
-defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick', 'previewFile'])
+defineEmits(['regenerate', 'edit', 'delete', 'prevBranch', 'nextBranch', 'pickDevice', 'notDesign', 'yammyClick', 'previewFile', 'askZip'])
 
 // ═══ Copy feedback ═══
 const copyDone = ref(false)
@@ -500,6 +517,16 @@ const allDownloads = computed(() => {
     }
     return items
 })
+
+const hasZip = computed(() => {
+    return allDownloads.value.some(f => (f.name || '').toLowerCase().endsWith('.zip'))
+})
+
+function downloadAll() {
+    for (const item of allDownloads.value) {
+        setTimeout(() => downloadItem(item), 100)
+    }
+}
 
 function downloadItem(item) {
     const key = `${props.msgId || 'msg'}-${item.type}-${item.index}`
@@ -920,6 +947,19 @@ async function copyText() {
     background: var(--bg3);
     color: var(--accent);
 }
+
+/* Bulk download actions */
+.download-bulk {
+    display: flex; gap: 6px; margin-top: 6px;
+}
+.download-bulk-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg2);
+    color: var(--text2); font-size: 11px; font-weight: 500;
+    font-family: inherit; cursor: pointer; transition: all .12s;
+}
+.download-bulk-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
 
 /* ═══════════════════════════════
    Design preview

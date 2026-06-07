@@ -237,7 +237,7 @@ function autoResize() {
 }
 
 function send() {
-  if (!canSend.value) return
+  if (!canSend.value || props.isRunning) return
   emit('send', text.value)
   text.value = ''
   // Reset height

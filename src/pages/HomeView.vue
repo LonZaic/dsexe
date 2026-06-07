@@ -158,7 +158,6 @@ const textareaRef = ref(null)
 const fileInputRef = ref(null)
 const pendingFiles = ref([])
 const loggedIn = ref(isLoggedIn())
-const model = ref('deepseek-v4-flash')
 const thinking = ref('on')
 
 const userName = computed(() => {
@@ -173,7 +172,7 @@ const greeting = computed(() => {
 })
 
 const thinkingLabel = computed(() => thinking.value === 'off' ? t('thinkOff') : t('thinkOn'))
-const modelLabel = computed(() => model.value.includes('pro') ? t('v4pro') : t('v4flash'))
+const modelLabel = computed(() => store.model.includes('pro') ? t('v4pro') : t('v4flash'))
 const TAB_COLORS = ['#4f7dff', '#7c5cfc', '#3fb950', '#f0883e', '#f85149', '#d2991d']
 
 function tabColor(i) { return TAB_COLORS[i % TAB_COLORS.length] }
@@ -182,7 +181,7 @@ function cycleThinking() {
   thinking.value = thinking.value === 'off' ? 'on' : 'off'
 }
 function cycleModel() {
-  model.value = model.value.includes('flash') ? 'deepseek-v4-pro' : 'deepseek-v4-flash'
+  store.setModel(store.model.includes('flash') ? 'deepseek-v4-pro' : 'deepseek-v4-flash')
 }
 
 function onKey(e) {

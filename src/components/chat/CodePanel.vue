@@ -75,6 +75,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
+import hljs from 'highlight.js'
 import AppIcon from '../common/AppIcon.vue'
 import { useI18n } from '../../composables/useI18n.js'
 
@@ -108,16 +109,17 @@ const codeLines = computed(() => {
   return currentTab.value?.code?.split('\n').length || 0
 })
 
-// Simple syntax highlighting (uses highlight.js if available, falls back to plain text)
+// Syntax highlighting via highlight.js with fallback
 const highlightedCode = computed(() => {
   return props.tabs.map(tab => {
     try {
-      if (window.hljs) {
-        const lang = window.hljs.getLanguage(tab.language)
-        if (lang) {
-          return window.hljs.highlight(tab.code, { language: tab.language }).value
-        }
+      const lang = hljs.getLanguage(tab.language)
+      if (lang) {
+        return hljs.highlight(tab.code, { language: tab.language }).value
       }
+      // Auto-detect language
+      const result = hljs.highlightAuto(tab.code)
+      if (result.language) return result.value
     } catch {}
     return escapeHtml(tab.code)
   })

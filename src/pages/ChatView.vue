@@ -31,6 +31,7 @@
                         :yammy-playing="yammy.playing"
                         :yammy-shaking="yammy.shaking"
                         @yammy-click="onYammyClick"
+                        @ask-zip="onAskZip"
                     />
                 </template>
             </VirtualList>
@@ -836,7 +837,7 @@ async function send() {
     const text = inputText.value.trim()
     const hasFiles = pendingFiles.value.length > 0
     if (!text && !hasFiles) return
-    if (agentRunningMap[store.currentId]) return
+    if (agentRunningMap[store.currentId] || store.isLoadingFor(store.currentId)) return
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
 
     if (getAgentMode()) {
@@ -861,11 +862,6 @@ async function send() {
     inputText.value = ''
     pendingFiles.value = ([])
     if (textareaRef.value) textareaRef.value.style.height = 'auto'
-
-    // Reset token counters
-    _skipTokenSave = true
-    tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0
-    _skipTokenSave = false
 
     const displayText = text
     store.addUserMessage(displayText, files)
@@ -988,11 +984,6 @@ async function sendToAgent(task) {
     if (!store.apikey) { alert('请先输入 API Key'); return }
     const convId = store.currentId
 
-    // Reset session token counters (don't save zeros)
-    _skipTokenSave = true
-    tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0
-    _skipTokenSave = false
-
     // All messages go through the full callStreamAPI path with web_search support
     // Clean up any previous agent state for this conversation
     if (agentAbortMap[convId]) {
@@ -1114,11 +1105,6 @@ function scrollToUserMsg() {
 }
 
 async function _doSend(text) {
-    // Reset session token counters for new user turn (don't save zeros)
-    _skipTokenSave = true
-    tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0
-    _skipTokenSave = false
-
     const files = pendingFiles.value.map(f => ({
         name: f.name, type: f.type, size: f.size, key: f.key, content: f.content || '', ocrText: f.ocrText || '',
     }))
@@ -1203,6 +1189,15 @@ function buildMessages(tempId) {
 - **严禁输出任何尖括号标签格式**，包括但不限于：\`<||DSML||>\`、\`<function_calls>\`、\`<invoke>\`、\`<parameter>\` 等——这些是内部协议标记，绝不能出现在聊天界面中。
 - **用 Markdown 表格呈现数据。** 如果回答涉及多天数据（天气预报）、多项目对比、列表型信息 → 用标准 Markdown 表格。表格前后配上简短自然语言总结，让用户一眼看懂。
 - **善用图表帮助理解。** 流程、关系、架构 → 用 mermaid；数据趋势 → 用 mermaid 或 SVG。
+- **Mermaid 语法铁律（违反则整图白屏，必须严格遵守）：**
+  1. **节点 ID 只用字母数字**，如 \`A\` \`B\` \`N1\`，禁止中文/符号当 ID
+  2. **标签里的中文和符号必须用双引号包裹**：\`A["你好: 结果"]\` 而不是 \`A[你好: 结果]\`
+  3. **方括号必须成对闭合**，每个 \`[\` 对应一个 \`]\`，每个 \`(\` 对应一个 \`)\`
+  4. **箭头用 \`-->\`**，不是 \`->\`。虚线 \`-.->\`，带文字 \`-->|文字|\`
+  5. **禁止用保留字当节点 ID**：end、graph、subgraph、direction 等
+  6. **subgraph 必须用 end 闭合**
+  7. **正确范例**：\`\`\`mermaid\ngraph TD\n  A["开始"] --> B["处理"]\n  B --> C["结束"]\n\`\`\`
+  8. **引号内出现引号用单引号**：\`A["他说'你好'"]\`
 - **该换行就换行。** 大段文字按逻辑分段，别糊成一团。
 - **面向小白。** 解释复杂概念时用大白话 + 风趣幽默的比喻。像给朋友讲技术一样——专业但接地气。
 - **非必要不表格。** 简单问答、一句话能说完的，正常文字输出就行。
@@ -2344,6 +2339,16 @@ For .pptx, use:
 }
 
 // Yammy click — brief play then auto-pause; 10th click triggers angry shake
+function onAskZip() {
+    // Collect file names from the last AI message
+    const msgs = store.visibleMessages
+    const lastAi = [...msgs].reverse().find(m => m.role === 'ai' && !m.streaming)
+    const files = lastAi?._downloadFiles || []
+    const names = files.map(f => f.name).join('、')
+    inputText.value = `帮我把这些文件打包成一个 zip：${names}`
+    nextTick(() => send())
+}
+
 function onYammyClick() {
     if (!yammy.msgId) return
     yammy.clickCount++
@@ -2512,7 +2517,7 @@ function openFilePreview(file) {
 }
 
 async function regenerate() {
-    if (agentRunningMap[store.currentId]) return
+    if (agentRunningMap[store.currentId] || store.isLoadingFor(store.currentId)) return
     const msgs = store.visibleMessages
     let device = null
     for (let i = msgs.length - 1; i >= 0; i--) {
