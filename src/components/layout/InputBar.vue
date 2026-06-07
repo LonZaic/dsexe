@@ -107,7 +107,7 @@
         <!-- Thinking depth -->
         <div class="toolbar-group">
           <button
-            :class="['toolbar-btn thinking-btn', { off: thinkingDepth === 'off' }]"
+            :class="['toolbar-btn bordered', { off: thinkingDepth === 'off' }]"
             :title="thinkingDepth === 'off' ? t('thinkOffHint') : t('thinkOnHint')"
             @click="cycleThinking"
           >
@@ -115,6 +115,20 @@
             <span class="toggle-label">{{ thinkingLabel }}</span>
           </button>
         </div>
+
+        <!-- Computer Management -->
+        <button
+          :class="['toolbar-btn bordered', { active: computerMode }]"
+          :title="computerMode ? '关闭电脑管理模式' : '管理电脑'"
+          @click="$emit('toggle-computer-mode')"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span class="toggle-label">管理电脑</span>
+          <span v-if="computerMode" class="pc-dot"></span>
+        </button>
 
         <!-- Model selector -->
         <button
@@ -170,6 +184,7 @@ const props = defineProps({
   model: { type: String, default: 'deepseek-v4-flash' },
   mode: { type: String, default: 'chat' },  // 'chat' | 'code'
   accept: { type: String, default: '' },     // file input accept filter
+  computerMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -181,6 +196,7 @@ const emit = defineEmits([
   'add-file',
   'remove-file',
   'paste',
+  'toggle-computer-mode',
 ])
 
 const text = computed({
@@ -355,6 +371,23 @@ defineExpose({ textareaRef, fileInput })
 }
 .toolbar-btn:hover { background: var(--bg3); color: var(--text2); }
 .toolbar-btn.toggle-btn.active { background: var(--accent-muted); color: var(--accent); }
+
+/* Bordered toolbar buttons — thinking depth + computer mode */
+.toolbar-btn.bordered {
+  border: 1px solid var(--border); border-radius: var(--radius-full);
+  padding: 3px 10px; gap: 5px;
+}
+.toolbar-btn.bordered:hover { border-color: var(--border2); }
+.toolbar-btn.bordered.active { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+.toolbar-btn.bordered.off { color: var(--text3); border-color: var(--border); }
+.toolbar-btn.bordered.off:hover { color: var(--yellow); border-color: var(--yellow); }
+
+.pc-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green); animation: pcPulse 1.5s ease-in-out infinite;
+}
+@keyframes pcPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
 .thinking-btn.off { color: var(--text3); }
 .thinking-btn.off:hover { color: var(--yellow); }
 

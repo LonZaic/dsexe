@@ -53,6 +53,8 @@
                 @remove-file="removeFile"
                 @paste="onPaste"
                 @toggle-model-menu="showModelMenu = !showModelMenu"
+                :computer-mode="computerMode"
+                @toggle-computer-mode="toggleComputerMode"
             />
 
             <!-- Model selector dropdown -->
@@ -136,6 +138,46 @@
               </Transition>
             </Teleport>
 
+            <!-- Danger operation confirmation dialog (computer management) -->
+            <Teleport to="body">
+              <Transition name="fade">
+                <div v-if="dangerConfirmVisible" class="danger-confirm-overlay">
+                  <div class="danger-confirm-box">
+                    <div class="danger-confirm-icon">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#f85149" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 9v4M12 17h.01" stroke="#f85149" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                    </div>
+                    <div class="danger-confirm-header">
+                      <span class="danger-confirm-badge">危险操作</span>
+                      <span class="danger-confirm-title">{{ dangerConfirmOp }}</span>
+                    </div>
+                    <div class="danger-confirm-body">
+                      <div class="danger-confirm-section">
+                        <div class="danger-confirm-label">操作说明</div>
+                        <div class="danger-confirm-text">{{ dangerConfirmDetail }}</div>
+                      </div>
+                      <div class="danger-confirm-section warning">
+                        <div class="danger-confirm-label">后果提示</div>
+                        <div class="danger-confirm-text">{{ dangerConfirmConsequence }}</div>
+                      </div>
+                    </div>
+                    <div class="danger-confirm-actions">
+                      <button class="danger-confirm-btn cancel" @click="onDangerConfirmReject">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        取消
+                      </button>
+                      <button class="danger-confirm-btn proceed" @click="onDangerConfirmApprove">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        确认执行
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Transition>
+            </Teleport>
+
             <!-- Image preview overlay -->
             <div v-if="previewSrc" class="preview-overlay" @click.self="previewSrc = null">
                 <button class="preview-close" @click="previewSrc = null">
@@ -190,6 +232,7 @@ import AppIcon from '../components/common/AppIcon.vue'
 import { useI18n } from '../composables/useI18n.js'
 import { confirmDelete } from '../utils/confirm.js'
 import { getCollections, getAllSavedItems, saveItem, findCollectionByName, createCollection, renameCollection, updateSavedItemContent, moveSavedItem, deleteSavedItem } from '../db/database.js'
+import { computerMode } from '../stores/computerModeStore.js'
 
 // ═══ DSML / Claude-style XML Tool Call Parser ═══
 // DeepSeek models sometimes output Claude-style XML tool invocations as text
@@ -359,6 +402,38 @@ function onSaveConfirmRetry() {
 
 // ═══ Track last saved item (for move/update/delete by AI) ═══
 let _lastSavedItemId = null
+
+// ═══ Computer Management Mode ═══
+function toggleComputerMode() {
+  computerMode.value = !computerMode.value
+}
+
+// Danger operation confirmation — AI provides the explanation
+const dangerConfirmVisible = ref(false)
+const dangerConfirmOp = ref('')
+const dangerConfirmDetail = ref('')
+const dangerConfirmConsequence = ref('')
+let _dangerConfirmResolve = null
+
+function showDangerConfirm(operation, detail, consequence) {
+  return new Promise((resolve) => {
+    dangerConfirmOp.value = operation
+    dangerConfirmDetail.value = detail
+    dangerConfirmConsequence.value = consequence
+    dangerConfirmVisible.value = true
+    _dangerConfirmResolve = resolve
+  })
+}
+
+function onDangerConfirmApprove() {
+  dangerConfirmVisible.value = false
+  if (_dangerConfirmResolve) { _dangerConfirmResolve(true); _dangerConfirmResolve = null }
+}
+
+function onDangerConfirmReject() {
+  dangerConfirmVisible.value = false
+  if (_dangerConfirmResolve) { _dangerConfirmResolve(false); _dangerConfirmResolve = null }
+}
 
 function renderPreview(content) {
   if (!content) return '<span style="color:var(--text3)">(无内容)</span>'
@@ -1151,6 +1226,11 @@ function buildMessages(tempId) {
     // Collection system — preferred for saving text content
     sysContent += '\n\n## 收藏系统\n你有 save_to_collection 工具可以将文字内容存入用户的收藏夹。**当用户要求"收藏"、"存起来"、"保存这段对话"、"存到XX收藏夹"时，必须调用此工具，严禁口头说"已存好"但不调工具。** 此外还有 rename_collection、move_last_saved、update_last_saved、delete_last_saved、list_collections 等工具管理收藏。**对于文本内容的保存，优先用收藏系统而非生成下载文件。**'
 
+    // Computer management mode
+    if (computerMode.value) {
+      sysContent += '\n\n## 电脑管理模式\n当前已启用电脑管理功能，你可以直接访问用户的磁盘文件（C:、D:、E: 等所有盘符）。\n- 只读操作直接执行，不需要确认：list_directory、read_file、analyze_disk、search_files\n- 危险操作需确认（会弹窗）：delete_file、delete_directory\n- move_file_pc 直接执行，无需确认\n- 用完数据后用自己的话总结，不要原样输出原始数据\n- **禁止访问的只有系统内核路径**（System32\\、\\sys\\、\\proc\\ 等），其他路径全部允许'
+    }
+
     // Weather tool — real data from Open-Meteo
     sysContent += '\n\n## 天气查询\n有 get_weather(city, days) 工具。**任何天气相关的问题必须调用此工具**——它能获取真实的实时天气数据。返回的是结构化天气数据（日期/天气/温度/降水概率/风速），你必须用 Markdown 表格呈现，并配上自然语言总结。绝对不要用 web_search 查天气。'
 
@@ -1769,8 +1849,116 @@ For .pptx, use:
                 parameters: { type: 'object', properties: {}, required: [] }
             }
         }]
+        // ─── Computer Management tools (only when mode enabled) ───
+        const computerTools = computerMode.value ? [
+          ...[{
+            type: 'function',
+            function: {
+              name: 'system_info',
+              description: '获取系统信息：内存总量/剩余、CPU核心数、所有磁盘分区及空间使用情况。当用户问"内存多少"、"磁盘空间"、"电脑配置"时调用。',
+              parameters: { type: 'object', properties: {}, required: [] }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'list_directory',
+              description: '列出指定目录的内容。用于浏览用户电脑上的文件和文件夹。',
+              parameters: {
+                type: 'object',
+                properties: {
+                  dirPath: { type: 'string', description: '目录路径，默认用户主目录' },
+                  depth: { type: 'number', description: '扫描深度，1-4，默认2' }
+                }, required: []
+              }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'read_file',
+              description: '读取文件内容。用于查看用户电脑上的文本文件。',
+              parameters: {
+                type: 'object',
+                properties: {
+                  filePath: { type: 'string', description: '文件的完整路径' }
+                }, required: ['filePath']
+              }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'analyze_disk',
+              description: '分析磁盘空间使用情况，找出大文件和临时文件。当用户说"内存爆了"、"磁盘满了"、"帮我清理"、"看看哪些可以删"时调用。',
+              parameters: {
+                type: 'object',
+                properties: {
+                  scanPath: { type: 'string', description: '要扫描的路径，默认用户主目录' }
+                }, required: []
+              }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'search_files',
+              description: '在电脑上搜索文件。按文件名关键词搜索。',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string', description: '搜索关键词（文件名包含）' },
+                  searchPath: { type: 'string', description: '搜索路径，默认用户主目录' }
+                }, required: ['query']
+              }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'delete_file',
+              description: `【危险操作—需要用户确认】删除指定文件。调用前必须先用文字告诉用户：1）要删什么 2）文件大小 3）删除原因和后果。explanation 参数填入你刚才给用户的说明文字，系统会弹出确认框让用户审批。`,
+              parameters: {
+                type: 'object',
+                properties: {
+                  filePath: { type: 'string', description: '文件的完整路径' },
+                  explanation: { type: 'string', description: '操作说明：为什么删、文件大小、后果。用户将在确认框中看到这段文字。' }
+                }, required: ['filePath', 'explanation']
+              }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'delete_directory',
+              description: `【危险操作—需要用户确认】删除整个文件夹及其内容。调用前必须先分析文件夹大小和文件数，用文字告诉用户。explanation 参数填入说明文字，系统弹出确认框。`,
+              parameters: {
+                type: 'object',
+                properties: {
+                  dirPath: { type: 'string', description: '文件夹的完整路径' },
+                  explanation: { type: 'string', description: '操作说明：文件夹内容、大小、删除理由和后果。' }
+                }, required: ['dirPath', 'explanation']
+              }
+            }
+          }],
+          ...[{
+            type: 'function',
+            function: {
+              name: 'move_file_pc',
+              description: '移动或重命名文件/文件夹。用于帮用户整理电脑文件。',
+              parameters: {
+                type: 'object',
+                properties: {
+                  fromPath: { type: 'string', description: '源路径' },
+                  toPath: { type: 'string', description: '目标路径' }
+                }, required: ['fromPath', 'toPath']
+              }
+            }
+          }],
+        ] : []
+
         // No design tool in normal chat — classifyIntent() pre-checks design intent before this
-        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool, ...saveFileTool, ...svgToImageTool, ...createZipTool, ...convertTool, ...createDocTool, ...createAudioTool, ...createGifTool, ...createPdfTool, ...saveToCollectionTool, ...renameCollectionTool, ...moveLastSavedTool, ...updateLastSavedTool, ...deleteLastSavedTool, ...listCollectionsTool]
+        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool, ...saveFileTool, ...svgToImageTool, ...createZipTool, ...convertTool, ...createDocTool, ...createAudioTool, ...createGifTool, ...createPdfTool, ...saveToCollectionTool, ...renameCollectionTool, ...moveLastSavedTool, ...updateLastSavedTool, ...deleteLastSavedTool, ...listCollectionsTool, ...computerTools]
 
         const dw = device?.w || 375
         const dh = device?.h || 667
@@ -1786,7 +1974,7 @@ For .pptx, use:
                     model: 'deepseek-v4-flash',
                     messages: msgs,
                     stream: false,
-                    max_tokens: 2000,
+                    max_tokens: 8192,
                     ...(allTools.length ? { tools: allTools, tool_choice: 'auto' } : {})
                 }
                 const retryRes = await fetch('/api/ai/chat', {
@@ -1896,6 +2084,22 @@ For .pptx, use:
                     toolResult = handleDeleteLastSaved()
                 } else if (toolName === 'list_collections') {
                     toolResult = handleListCollections()
+                } else if (toolName === 'system_info') {
+                    toolResult = await handleSystemInfo()
+                } else if (toolName === 'list_directory') {
+                    toolResult = await handleListDirectory(args)
+                } else if (toolName === 'read_file') {
+                    toolResult = await handleReadFile(args)
+                } else if (toolName === 'analyze_disk') {
+                    toolResult = await handleAnalyzeDisk(args)
+                } else if (toolName === 'search_files') {
+                    toolResult = await handleSearchFiles(args)
+                } else if (toolName === 'delete_file') {
+                    toolResult = await handleDeleteFile(args)
+                } else if (toolName === 'delete_directory') {
+                    toolResult = await handleDeleteDirectory(args)
+                } else if (toolName === 'move_file_pc') {
+                    toolResult = await handleMoveFilePC(args)
                 } else if (executors[toolName]) {
                     toolResult = await executors[toolName](args)
                 } else {
@@ -1982,7 +2186,7 @@ For .pptx, use:
                                 { role: 'user', content: '问题：' + (msgs.find(m => m.role === 'user')?.content || '') + '\n\n搜索结果：\n' + (lastToolResult || '') }
                             ],
                             stream: false,
-                            max_tokens: 2000
+                            max_tokens: 8192
                         }
                         const retryRes = await fetch('/api/ai/chat', {
                             method: 'POST',
@@ -2024,9 +2228,8 @@ For .pptx, use:
                     const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl, thinkingDepth.value)
                     finalText = second.text
                     if (!finalText || finalText.length < 5) {
-                        // 不直接输出原始搜索结果——改为友好提示
-                        store.updateStreamCleanText(tempId, '搜索已完成，但内容整理失败。请换一种问法或重试。')
-                        finalText = '搜索结果整理遇到问题，请换一种问法或重试。'
+                        store.updateStreamCleanText(tempId, '内容生成未完成，可能是回复过长或模型暂时超载。请稍后重试。')
+                        finalText = '抱歉，回复生成未完成。可能是内容过长或模型暂时超载，请稍后重试。'
                     }
                 }
             }
@@ -2079,11 +2282,11 @@ For .pptx, use:
             } else {
                 // Truly nothing happened — retry non-streaming as last resort
                 try {
-                    const retryBody = { 
-                        model: store.model || 'deepseek-v4-flash', 
-                        messages: msgs, 
-                        stream: false, 
-                        max_tokens: 2000 
+                    const retryBody = {
+                        model: store.model || 'deepseek-v4-flash',
+                        messages: msgs,
+                        stream: false,
+                        max_tokens: 8192
                     }
                     const retryRes = await fetch('/api/ai/chat', { 
                         method: 'POST', 
@@ -2501,6 +2704,118 @@ function handleListCollections() {
     collections: cols.map(c => ({ name: c.name, id: c.id })),
     message: list ? `你的收藏夹：${list}${globalStr ? '、' + globalStr : ''}` : '你还没有收藏夹'
   })
+}
+
+// ═══ Computer Management handlers ═══
+
+async function callComputerAPI(endpoint, body = {}) {
+  const res = await fetch(`/api/computer/${endpoint}`, {
+    method: 'POST',
+    headers: getApiHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  })
+  return res.json()
+}
+
+async function handleSystemInfo() {
+  try {
+    const data = await callComputerAPI('system-info')
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    const drives = (data.drives || []).map(d =>
+      d.totalGB ? `${d.drive} 总${d.totalGB}GB 剩${d.freeGB}GB (已用${d.usedPercent}%)` : `${d.drive} 可访问`
+    ).join('\n')
+    return JSON.stringify({
+      status: 'ok',
+      summary: `内存: ${data.totalMemoryGB}GB 总 / ${data.freeMemoryGB}GB 剩 (已用${data.usedMemoryPercent}%) | CPU: ${data.cpus}核 | ${data.platform}\n磁盘:\n${drives}`,
+      raw: data
+    })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleListDirectory(args) {
+  try {
+    const data = await callComputerAPI('list-dir', { dirPath: args.dirPath, depth: args.depth || 2 })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    // Return a summary to keep context small
+    function flatten(node, indent = 0) {
+      let lines = []
+      const prefix = '  '.repeat(indent)
+      if (node.type === 'directory') {
+        lines.push(prefix + node.name + '/')
+        for (const child of (node.children || [])) {
+          lines.push(...flatten(child, indent + 1))
+        }
+      } else {
+        const sizeMB = node.size ? ` (${(node.size / 1048576).toFixed(1)}MB)` : ''
+        lines.push(prefix + node.name + sizeMB)
+      }
+      return lines
+    }
+    const summary = flatten(data.tree).slice(0, 200).join('\n')
+    return JSON.stringify({ status: 'ok', summary, raw: data })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleReadFile(args) {
+  try {
+    const data = await callComputerAPI('read-file', { filePath: args.filePath })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    return JSON.stringify({ status: 'ok', name: data.name, size: data.size, lines: data.lines, content: data.content.slice(0, 8000) })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleAnalyzeDisk(args) {
+  try {
+    const data = await callComputerAPI('analyze-disk', { scanPath: args.scanPath })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    return JSON.stringify(data)
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleSearchFiles(args) {
+  try {
+    const data = await callComputerAPI('search-files', { query: args.query, searchPath: args.searchPath })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    const list = data.results.slice(0, 30).map(r => `${r.name} (${r.type === 'directory' ? '文件夹' : r.sizeMB + 'MB'}) - ${r.path}`).join('\n')
+    return JSON.stringify({ status: 'ok', count: data.count, results: list })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleDeleteFile(args) {
+  try {
+    // Show danger confirmation with AI's explanation
+    const approved = await showDangerConfirm(
+      '删除文件',
+      args.explanation || `删除 ${args.filePath}`,
+      '此操作不可恢复，文件将被永久删除。'
+    )
+    if (!approved) return JSON.stringify({ status: 'cancelled', message: '用户取消了删除操作' })
+    const data = await callComputerAPI('delete-file', { filePath: args.filePath })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    return JSON.stringify({ status: 'ok', message: `已删除: ${data.name}`, detail: data })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleDeleteDirectory(args) {
+  try {
+    const approved = await showDangerConfirm(
+      '删除文件夹',
+      args.explanation || `删除 ${args.dirPath}`,
+      '文件夹及其所有内容将被永久删除，不可恢复。'
+    )
+    if (!approved) return JSON.stringify({ status: 'cancelled', message: '用户取消了删除操作' })
+    const data = await callComputerAPI('delete-dir', { dirPath: args.dirPath })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    return JSON.stringify({ status: 'ok', message: `已删除: ${data.name} (${data.fileCount}个文件, ${data.totalSizeMB}MB)`, detail: data })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
+}
+
+async function handleMoveFilePC(args) {
+  try {
+    const data = await callComputerAPI('move-file', { fromPath: args.fromPath, toPath: args.toPath })
+    if (data.error) return JSON.stringify({ status: 'error', error: data.error })
+    return JSON.stringify({ status: 'ok', message: `已移动: ${data.name}`, detail: data })
+  } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
 }
 
 async function handleWebFetch(url) {
@@ -3182,6 +3497,69 @@ async function generateTitle(userMsg, convId) {
 .save-confirm-btn.approve:hover {
   background: var(--accent-hover);
 }
+
+/* Danger confirmation dialog */
+.danger-confirm-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.danger-confirm-box {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 28px;
+  width: 440px; max-width: 94vw;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+  animation: pickerSlideUp .22s cubic-bezier(0.16,1,0.3,1);
+}
+.danger-confirm-icon {
+  display: flex; justify-content: center; margin-bottom: 12px;
+}
+.danger-confirm-header {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  margin-bottom: 18px; text-align: center;
+}
+.danger-confirm-badge {
+  display: inline-block; padding: 2px 10px; border-radius: var(--radius-full);
+  background: rgba(248,81,73,0.12); color: #f85149;
+  font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+.danger-confirm-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.danger-confirm-body { margin-bottom: 20px; }
+.danger-confirm-section {
+  padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--bg2); border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.danger-confirm-section.warning {
+  background: rgba(248,81,73,0.05); border-color: rgba(248,81,73,0.2);
+}
+.danger-confirm-label {
+  font-size: 10px; font-weight: 700; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+}
+.danger-confirm-section.warning .danger-confirm-label { color: #f85149; }
+.danger-confirm-text {
+  font-size: 12px; color: var(--text2); line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word;
+}
+.danger-confirm-actions {
+  display: flex; gap: 10px;
+}
+.danger-confirm-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 0; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; font-family: inherit;
+  cursor: pointer; transition: all .12s ease;
+}
+.danger-confirm-btn.cancel {
+  background: var(--bg2); color: var(--text2); border: 1px solid var(--border);
+}
+.danger-confirm-btn.cancel:hover { background: var(--bg3); color: var(--text); }
+.danger-confirm-btn.proceed {
+  background: #e03131; color: #fff; border: none;
+}
+.danger-confirm-btn.proceed:hover { filter: brightness(1.15); }
+.danger-confirm-btn.proceed:active { transform: scale(0.97); }
 
 .fade-enter-active { transition: opacity 0.2s ease; }
 .fade-leave-active { transition: opacity 0.15s ease; }

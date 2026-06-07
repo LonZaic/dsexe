@@ -13,6 +13,7 @@ const codeRoutes = require('./code.routes')
 const searchRoutes = require('./search.routes')
 const weatherRoutes = require('./weather.routes')
 const filesRoutes = require('./files.routes')
+const computerRoutes = require('./computer.routes')
 
 const router = Router()
 
@@ -25,5 +26,6 @@ router.use('/api', codeRoutes)
 router.use('/api', searchRoutes)
 router.use('/api', weatherRoutes)
 router.use('/api', filesRoutes)
+router.use('/api', computerRoutes)
 
 module.exports = router

@@ -102,13 +102,18 @@
           />
           <div class="input-toolbar">
             <div class="toolbar-left">
-              <button :class="['tool-btn', { active: thinking === 'on' }]" @click="cycleThinking">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3v3.5L9 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-                {{ thinkingLabel }}
-              </button>
               <input ref="fileInputRef" type="file" multiple class="hp-hidden-input" @change="onFilesSelected" />
               <button class="tool-btn" title="添加文件" @click="fileInputRef?.click()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <button :class="['tool-btn bordered', { active: thinking === 'on' }]" @click="cycleThinking">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3v3.5L9 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                {{ thinkingLabel }}
+              </button>
+              <button :class="['tool-btn bordered', { active: computerMode }]" @click="computerMode = !computerMode" title="管理电脑">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                管理电脑
+                <span v-if="computerMode" class="hp-pc-dot"></span>
               </button>
             </div>
             <div class="toolbar-right">
@@ -140,6 +145,7 @@ import { isLoggedIn } from '../api/index.js'
 import { useI18n } from '../composables/useI18n.js'
 import ChatView from './ChatView.vue'
 import TokenBar from '../components/common/TokenBar.vue'
+import { computerMode } from '../stores/computerModeStore.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -471,6 +477,20 @@ onMounted(async () => {
 }
 .hp-file-chip-remove:hover { background: rgba(248,81,73,0.12); color: var(--red); }
 .hp-hidden-input { display: none; }
+
+.tool-btn.bordered {
+  border: 1px solid var(--border); border-radius: var(--radius-full);
+  padding: 4px 10px; gap: 5px;
+}
+.tool-btn.bordered:hover { border-color: var(--border2); }
+.tool-btn.bordered.active { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+
+.hp-pc-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green); animation: hpPcPulse 1.5s ease-in-out infinite;
+  display: inline-block;
+}
+@keyframes hpPcPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
 .input-wrap {
   width: 100%;
