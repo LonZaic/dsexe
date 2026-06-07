@@ -102,7 +102,7 @@
           />
           <div class="input-toolbar">
             <div class="toolbar-left">
-              <button class="tool-btn" :class="{ active: thinking !== 'medium' }" @click="cycleThinking">
+              <button :class="['tool-btn', { active: thinking === 'on' }]" @click="cycleThinking">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.2"/><path d="M6.5 3v3.5L9 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
                 {{ thinkingLabel }}
               </button>
@@ -153,7 +153,7 @@ const fileInputRef = ref(null)
 const pendingFiles = ref([])
 const loggedIn = ref(isLoggedIn())
 const model = ref('deepseek-v4-flash')
-const thinking = ref('medium')
+const thinking = ref('on')
 
 const userName = computed(() => {
   try { return JSON.parse(localStorage.getItem('bbot_user')).name } catch { return '' }
@@ -166,15 +166,14 @@ const greeting = computed(() => {
   return name ? `${t(key)}, ${name}` : t(key)
 })
 
-const thinkingLabel = computed(() => ({ low: t('quick'), medium: t('think'), high: t('deep') })[thinking.value])
+const thinkingLabel = computed(() => thinking.value === 'off' ? t('thinkOff') : t('thinkOn'))
 const modelLabel = computed(() => model.value.includes('pro') ? t('v4pro') : t('v4flash'))
 const TAB_COLORS = ['#4f7dff', '#7c5cfc', '#3fb950', '#f0883e', '#f85149', '#d2991d']
 
 function tabColor(i) { return TAB_COLORS[i % TAB_COLORS.length] }
 
 function cycleThinking() {
-  const o = ['low','medium','high']
-  thinking.value = o[(o.indexOf(thinking.value) + 1) % 3]
+  thinking.value = thinking.value === 'off' ? 'on' : 'off'
 }
 function cycleModel() {
   model.value = model.value.includes('flash') ? 'deepseek-v4-pro' : 'deepseek-v4-flash'

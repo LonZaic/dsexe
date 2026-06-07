@@ -65,6 +65,7 @@
                   :class="['model-opt', { active: store.model === m.id }]"
                   @click="selectModel(m.id)"
                 >
+                  <span class="model-dot" :class="{ flash: m.id.includes('flash'), pro: m.id.includes('pro') }"></span>
                   <span class="model-opt-name">{{ m.label }}</span>
                   <span class="model-opt-desc">{{ m.desc }}</span>
                   <svg v-if="store.model === m.id" width="14" height="14" viewBox="0 0 14 14" fill="none" class="model-check">
@@ -245,7 +246,7 @@ function selectModel(id) {
 // ═══ Per-tab state — isolated via component :key on tab switch ═══
 const pendingFiles = ref([])
 // Web search always ON — 不确定就搜，禁止编造
-const thinkingDepth = ref('medium')
+const thinkingDepth = ref('on')  // 'on' = thinking enabled, 'off' = thinking disabled
 const agentMode = ref(false)
 const showDeviceBar = ref(false)
 const selectedDevice = ref(null)
@@ -263,7 +264,7 @@ const agentTimerMap = {}
 const agentTimerNow = ref(0)
 const tokPrompt = ref(0); const tokComp = ref(0); const tokTotal = ref(0)
 const balance = ref(null)
-const chatModel = ref(localStorage.getItem('chat_model') || 'deepseek-v4-pro')
+const chatModel = computed(() => store.model)
 
 // Yammy mascot — right side of AI reply bottom row
 const yammy = reactive({
@@ -1101,10 +1102,14 @@ function buildMessages(tempId) {
     return msgs
 }
 
-async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, deviceH = 667, abortCtrl = null) {
+async function doStream(msgs, tempId, tools, isDesign = false, deviceW = 375, deviceH = 667, abortCtrl = null, thinkingDepth = 'on') {
     // Force V4 Pro for design tasks — better quality, reasoning support
     const model = isDesign ? 'deepseek-v4-pro' : store.model
     const body = { model, messages: msgs }
+    // Thinking control — when off, disable reasoning to save tokens & speed up
+    if (thinkingDepth === 'off') {
+        body.thinking = { type: 'disabled' }
+    }
     if (tools && tools.length) {
         body.tools = tools
         body.tool_choice = 'auto'
@@ -1543,7 +1548,7 @@ For .pptx, use:
 
         const dw = device?.w || 375
         const dh = device?.h || 667
-        const first = await doStream(msgs, tempId, allTools, isDesign, dw, dh, abortCtrl)
+        const first = await doStream(msgs, tempId, allTools, isDesign, dw, dh, abortCtrl, thinkingDepth.value)
         let finalText = first.text
         console.log('[DEBUG callStreamAPI] first.text length:', first.text?.length, 'toolCalls:', first.toolCalls?.length, 'reasoning:', first.reasoning?.length, 'model:', store.model)
 
@@ -1686,7 +1691,7 @@ For .pptx, use:
             if (anyFileTool) {
                 // File generation: lightweight confirmation
                 msgs.push({ role: 'user', content: '文件已生成。简要告诉用户文件已准备好下载（文件下载条已在界面显示，严禁在你的回复中输出任何下载链接、URL、路径或文件地址），然后继续回答用户的问题。不要重复输出文件内容。' })
-                const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl)
+                const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl, thinkingDepth.value)
                 finalText = second.text || first.text
                 if (!finalText || finalText.length < 5 || finalText.startsWith('[工具调用:')) {
                     // Generate proper summary from tool results (handles deepseek-v4-pro empty content)
@@ -1726,7 +1731,7 @@ For .pptx, use:
                 msgs.push({ role: 'user', content: '以上是搜索工具返回的原始数据。你必须：1）用自己的话重新组织和表达——就像这些知识本来就在你脑子里一样；2）只回答用户原本的问题，不要跑题，搜到不相关的内容就说"未找到相关信息"；3）绝对不要复制粘贴搜索条目列表、不要输出"搜索结果如下"、不要输出"[来源:]"或"[高可信]"等标注。当用户要求评价、分析、判断时，基于内容给出技术评价。该做表格做表格，该画图画画。' })
                 store.appendStreamText(tempId, '正在整理搜索结果...')
                 store.appendStreamReasoning(tempId, first.reasoning)
-                const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl)
+                const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl, thinkingDepth.value)
                 finalText = second.text || first.text
                 // DeepSeek reasoning 模型偶发 content 为空 → 用非流式重试
                 if (!finalText || finalText.length < 20) {
@@ -1778,7 +1783,7 @@ For .pptx, use:
                     store.updateStreamCleanText(tempId, '')
                     store.appendStreamText(tempId, isUrlFetch ? '正在抓取网页内容...' : '正在搜索真实信息...')
                     store.appendStreamReasoning(tempId, first.reasoning)
-                    const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl)
+                    const second = await doStream(msgs, tempId, [], isDesign, dw, dh, abortCtrl, thinkingDepth.value)
                     finalText = second.text
                     if (!finalText || finalText.length < 5) {
                         // 不直接输出原始搜索结果——改为友好提示
@@ -1973,7 +1978,7 @@ async function onPickDevice(pickerMsg, device) {
         for (let i = msgs2.length - 1; i >= 0; i--) {
             if (msgs2[i].role === 'user') { msgs2[i].content = finalText; break }
         }
-        const first = await doStream(msgs2, tempId, [], true, dev.w, dev.h, abortCtrl)
+        const first = await doStream(msgs2, tempId, [], true, dev.w, dev.h, abortCtrl, 'on')
         let final = first.text
         await store.finishStreamReply(tempId)
 
@@ -2703,6 +2708,9 @@ async function generateTitle(userMsg, convId) {
 }
 .model-opt:hover { background: var(--bg3); color: var(--text); }
 .model-opt.active { background: var(--accent-muted); color: var(--accent); }
+.model-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.model-dot.flash { background: var(--yellow); }
+.model-dot.pro { background: var(--accent); }
 .model-opt-name { font-weight: 500; white-space: nowrap; }
 .model-opt-desc { font-size: 11px; color: var(--text3); flex: 1; }
 .model-opt.active .model-opt-desc { color: var(--accent); opacity: .7; }

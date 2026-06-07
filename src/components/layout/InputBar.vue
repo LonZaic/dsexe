@@ -107,8 +107,8 @@
         <!-- Thinking depth -->
         <div class="toolbar-group">
           <button
-            class="toolbar-btn thinking-btn"
-            :title="t('thinkingDepth')"
+            :class="['toolbar-btn thinking-btn', { off: thinkingDepth === 'off' }]"
+            :title="thinkingDepth === 'off' ? t('thinkOffHint') : t('thinkOnHint')"
             @click="cycleThinking"
           >
             <AppIcon name="lightbulb" :size="16" />
@@ -197,8 +197,7 @@ const fileInput = ref(null)
 const plusBtnRef = ref(null)
 
 const thinkingLabel = computed(() => {
-  const map = { low: t('quick'), medium: t('think'), high: t('deep') }
-  return map[props.thinkingDepth] || t('think')
+  return props.thinkingDepth === 'off' ? t('thinkOff') : t('thinkOn')
 })
 
 const modelLabel = computed(() => {
@@ -232,10 +231,7 @@ function send() {
 }
 
 function cycleThinking() {
-  const order = ['low', 'medium', 'high']
-  const idx = order.indexOf(props.thinkingDepth)
-  const next = order[(idx + 1) % order.length]
-  emit('update:thinkingDepth', next)
+  emit('update:thinkingDepth', props.thinkingDepth === 'off' ? 'on' : 'off')
 }
 
 function handleAction(type) {
@@ -359,6 +355,8 @@ defineExpose({ textareaRef, fileInput })
 }
 .toolbar-btn:hover { background: var(--bg3); color: var(--text2); }
 .toolbar-btn.toggle-btn.active { background: var(--accent-muted); color: var(--accent); }
+.thinking-btn.off { color: var(--text3); }
+.thinking-btn.off:hover { color: var(--yellow); }
 
 .toggle-label { font-size: 11px; font-weight: 400; }
 .model-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }

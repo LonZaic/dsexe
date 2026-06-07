@@ -69,6 +69,10 @@ const L = {
   // ── Thinking & Model Labels ──
   quick:           ['快速', '快速', '快速', 'Quick'],
   think:           ['思考', '思考', '思考', 'Think'],
+  thinkOn:         ['思考', '思考', '思考', 'Think'],
+  thinkOff:        ['快速', '快速', '快速', 'Quick'],
+  thinkOnHint:     ['思考已开启 — 点击关闭', '思考已開啟 — 點擊關閉', '思考已開啟 — 點擊關閉', 'Thinking on — click to disable'],
+  thinkOffHint:    ['思考已关闭 — 点击开启', '思考已關閉 — 點擊開啟', '思考已關閉 — 點擊開啟', 'Thinking off — click to enable'],
   deep:            ['深度', '深度', '深度', 'Deep'],
   v4flash:         ['V4-Flash', 'V4-Flash', 'V4-Flash', 'V4-Flash'],
   v4pro:           ['V4-Pro', 'V4-Pro', 'V4-Pro', 'V4-Pro'],
