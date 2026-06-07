@@ -278,6 +278,7 @@ import { getCollections, saveItem, isItemDuplicate } from '../db/database.js'
 const { t } = useI18n()
 
 const props = defineProps({
+    msgId: { type: [String, Number], default: null },
     role: { type: String, required: true },
     text: { type: String, required: true },
     reasoning: { type: String, default: '' },

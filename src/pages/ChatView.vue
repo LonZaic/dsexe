@@ -75,6 +75,35 @@
               </div>
             </Transition>
 
+            <!-- Collection picker (triggered by AI save_to_collection tool) -->
+            <Teleport to="body">
+              <Transition name="fade">
+                <div v-if="toolPickerVisible" class="tool-picker-overlay" @click.self="onToolPickerCancel">
+                  <div class="tool-picker-box">
+                    <div class="tool-picker-header">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      <span>AI 想帮你收藏内容</span>
+                    </div>
+                    <div class="tool-picker-preview">{{ toolPickerPreview || '(无内容)' }}</div>
+                    <div class="tool-picker-label">选择收藏夹</div>
+                    <div class="tool-picker-list">
+                      <button class="tool-picker-opt" @click="onToolPickerSelect(null)">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>全局收藏</span>
+                      </button>
+                      <button v-for="col in toolPickerCollections" :key="col.id" class="tool-picker-opt" @click="onToolPickerSelect(col.id)">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v11z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span>{{ col.name }}</span>
+                      </button>
+                    </div>
+                    <button class="tool-picker-cancel" @click="onToolPickerCancel">取消</button>
+                  </div>
+                </div>
+              </Transition>
+            </Teleport>
+
             <!-- Image preview overlay -->
             <div v-if="previewSrc" class="preview-overlay" @click.self="previewSrc = null">
                 <button class="preview-close" @click="previewSrc = null">
@@ -128,6 +157,7 @@ import AppIcon from '../components/common/AppIcon.vue'
 
 import { useI18n } from '../composables/useI18n.js'
 import { confirmDelete } from '../utils/confirm.js'
+import { getCollections, saveItem, findCollectionByName } from '../db/database.js'
 
 // ═══ DSML / Claude-style XML Tool Call Parser ═══
 // DeepSeek models sometimes output Claude-style XML tool invocations as text
@@ -234,6 +264,40 @@ const codePanelTabs = ref([])
 const filePreviewVisible = ref(false)
 const filePreviewFile = ref(null)
 const showModelMenu = ref(false)
+
+// ═══ AI save_to_collection tool picker ═══
+const toolPickerVisible = ref(false)
+const toolPickerCollections = ref([])
+const toolPickerContent = ref('')
+const toolPickerPreview = ref('')
+let _toolPickerResolve = null
+
+function showToolPicker(collections, content, preview) {
+  return new Promise((resolve) => {
+    toolPickerCollections.value = collections
+    toolPickerContent.value = content
+    toolPickerPreview.value = preview
+    toolPickerVisible.value = true
+    _toolPickerResolve = resolve
+  })
+}
+
+function onToolPickerSelect(colId) {
+  toolPickerVisible.value = false
+  if (_toolPickerResolve) {
+    _toolPickerResolve(colId)
+    _toolPickerResolve = null
+  }
+}
+
+function onToolPickerCancel() {
+  toolPickerVisible.value = false
+  if (_toolPickerResolve) {
+    _toolPickerResolve(null)
+    _toolPickerResolve = null
+  }
+}
+
 const MODELS = [
   { id: 'deepseek-v4-flash', label: 'V4 Flash', desc: '快速响应' },
   { id: 'deepseek-v4-pro', label: 'V4 Pro', desc: '深度思考' },
@@ -1544,8 +1608,28 @@ For .pptx, use:
                 }
             }
         }]
+        // Save to collection tool — AI can save its output to user's collections
+        const saveToCollectionTool = [{
+            type: 'function',
+            function: {
+                name: 'save_to_collection',
+                description: `将对话内容保存到用户的收藏夹。当用户说"收藏"、"保存这段"、"存起来"、"帮我收藏"等要求收藏内容时调用。
+- 如果用户明确说了收藏夹名称（如"收藏到代码收藏夹"），collection_name 填那个名称
+- 如果用户没说收藏夹名称（如"收藏一下"），collection_name 留空字符串，系统会弹出选择器让用户选
+- content 传入要收藏的完整内容，用 Markdown 格式整理好`,
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        collection_name: { type: 'string', description: '收藏夹名称，用户指定了才填，没指定就留空字符串 ""' },
+                        content: { type: 'string', description: '要收藏的完整内容（Markdown格式）' },
+                        preview: { type: 'string', description: '内容前30字作为预览' }
+                    },
+                    required: ['content']
+                }
+            }
+        }]
         // No design tool in normal chat — classifyIntent() pre-checks design intent before this
-        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool, ...saveFileTool, ...svgToImageTool, ...createZipTool, ...convertTool, ...createDocTool, ...createAudioTool, ...createGifTool, ...createPdfTool]
+        const allTools = isDesign ? [] : [...tools, ...weatherTool, ...webSearchTool, ...webFetchTool, ...saveFileTool, ...svgToImageTool, ...createZipTool, ...convertTool, ...createDocTool, ...createAudioTool, ...createGifTool, ...createPdfTool, ...saveToCollectionTool]
 
         const dw = device?.w || 375
         const dh = device?.h || 667
@@ -1659,6 +1743,8 @@ For .pptx, use:
                     toolResult = await handleWebFetch(args.url)
                 } else if (toolName === 'get_weather') {
                     toolResult = await handleGetWeather(args)
+                } else if (toolName === 'save_to_collection') {
+                    toolResult = await handleSaveToCollection(args, tempId)
                 } else if (executors[toolName]) {
                     toolResult = await executors[toolName](args)
                 } else {
@@ -2159,6 +2245,49 @@ function isNamespaceUrl(url) {
       || /schema\.xml/i.test(lower)
       || /^https?:\/\/www\.w3\.org\/tr\//i.test(lower)
       || lower.startsWith('data:')
+}
+
+// ═══ save_to_collection handler ═══
+async function handleSaveToCollection(args, tempId) {
+  const content = args.content || ''
+  const preview = args.preview || content.replace(/\n/g, ' ').slice(0, 30)
+  const colName = (args.collection_name || '').trim()
+
+  // User specified a collection name — try to find it
+  if (colName) {
+    const found = findCollectionByName(colName)
+    if (found) {
+      saveItem(found.id, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
+      return JSON.stringify({ status: 'ok', collection: found.name, message: `已收藏到「${found.name}」` })
+    } else {
+      const all = getCollections()
+      return JSON.stringify({
+        status: 'not_found',
+        name: colName,
+        available: all.map(c => c.name),
+        message: `未找到收藏夹「${colName}」，现有收藏夹：${all.map(c => '「' + c.name + '」').join('、') || '无'}`
+      })
+    }
+  }
+
+  // No collection name — show picker
+  const all = getCollections()
+  const collections = all.map(c => ({ id: c.id, name: c.name }))
+
+  // Wait for user to pick a collection via the UI
+  const chosenColId = await showToolPicker(collections, content, preview)
+
+  if (chosenColId === null) {
+    // User cancelled
+    return JSON.stringify({ status: 'cancelled', message: '用户取消了收藏' })
+  }
+
+  // User picked a collection — save it
+  const chosenName = chosenColId
+    ? all.find(c => c.id === chosenColId)?.name || '收藏夹'
+    : '全局收藏'
+  saveItem(chosenColId, JSON.stringify({ text: content, type: 'ai_saved' }), preview)
+  return JSON.stringify({ status: 'ok', collection: chosenName, message: `已收藏到「${chosenName}」` })
 }
 
 async function handleWebFetch(url) {
@@ -2729,6 +2858,68 @@ async function generateTitle(userMsg, convId) {
 .drop-leave-active { animation: dropOut .1s ease both; transform-origin: bottom right; }
 @keyframes dropIn { from { opacity: 0; transform: scale(.95) translateY(4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes dropOut { from { opacity: 1; transform: scale(1) translateY(0); } to { opacity: 0; transform: scale(.95) translateY(4px); } }
+
+/* Tool picker — AI save_to_collection */
+.tool-picker-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.tool-picker-box {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px;
+  width: 340px; max-width: 92vw;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.7);
+  animation: pickerSlideUp .22s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes pickerSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tool-picker-header {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: var(--text);
+  margin-bottom: 10px;
+}
+.tool-picker-header svg { color: var(--accent); }
+.tool-picker-preview {
+  font-size: 12px; color: var(--text2); line-height: 1.5;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--bg2); border: 1px solid var(--border);
+  margin-bottom: 12px; max-height: 60px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.tool-picker-label {
+  font-size: 11px; font-weight: 600; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.tool-picker-list {
+  max-height: 180px; overflow-y: auto; margin-bottom: 10px;
+}
+.tool-picker-opt {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; background: transparent;
+  color: var(--text2); font-size: 13px; font-family: inherit;
+  cursor: pointer; transition: all 0.12s ease; text-align: left;
+}
+.tool-picker-opt:hover {
+  background: var(--bg2); border-color: var(--border); color: var(--text);
+}
+.tool-picker-opt svg { flex-shrink: 0; color: var(--text3); transition: color 0.12s; }
+.tool-picker-opt:hover svg { color: var(--accent); }
+.tool-picker-cancel {
+  width: 100%; padding: 7px 0; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg2);
+  color: var(--text2); font-size: 12px; font-family: inherit;
+  cursor: pointer; transition: all 0.12s ease;
+}
+.tool-picker-cancel:hover { background: var(--bg3); color: var(--text); }
+
+.fade-enter-active { transition: opacity 0.2s ease; }
+.fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media (max-width: 768px) {
   .device-bar { padding: 4px 10px; }

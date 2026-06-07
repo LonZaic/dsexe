@@ -533,3 +533,12 @@ export function moveSavedItem(itemId, newCollectionId) {
     [newCollectionId || null, itemId])
   saveDB()
 }
+
+export function findCollectionByName(name) {
+  const stmt = db.prepare('SELECT * FROM collections WHERE LOWER(name) = LOWER(?)')
+  stmt.bind([name.trim()])
+  let result = null
+  if (stmt.step()) result = stmt.getAsObject()
+  stmt.free()
+  return result || null
+}
