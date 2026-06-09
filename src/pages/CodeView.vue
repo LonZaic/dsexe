@@ -1075,7 +1075,7 @@ async function send() {
                 } catch {}
             }
             if (crawlResults.length > 0) {
-                const MAX_INJECT = 120000
+                const MAX_INJECT = 300000
                 let injectText = crawlResults.join('\n\n---\n\n')
                 if (injectText.length > MAX_INJECT) {
                     injectText = injectText.slice(0, MAX_INJECT) + '\n\n[... 余下内容已截断，需要具体文件内容请直接询问]'

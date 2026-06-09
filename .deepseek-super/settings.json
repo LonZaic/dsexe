@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "哈哈哈哈": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "hhhh"
+      ],
+      "url": "",
+      "headers": {},
+      "env": {},
+      "description": "测试"
+    },
+    "notion": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-notion"
+      ],
+      "env": {
+        "NOTION_API_KEY": "<your-notion-token>"
+      },
+      "description": "Notion 工作空间：页面、数据库、搜索"
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-github-token>"
+      },
+      "description": "管理 Issues、PR、仓库搜索，GitHub 全平台集成"
+    }
+  }
+}

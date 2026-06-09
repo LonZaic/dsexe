@@ -138,6 +138,116 @@
         </p>
       </template>
 
+      <!-- MCP Servers -->
+      <template v-else-if="currentTab === 'mcp'">
+        <h2>MCP 服务器</h2>
+        <p class="sub">管理 Model Context Protocol 服务器，扩展 AI 能力</p>
+
+        <!-- MCP Servers list -->
+        <div v-if="mcpStore.loading.value" class="list-loading">加载服务器列表...</div>
+        <div v-else-if="mcpServers.length" class="mcp-list">
+          <McpServerCard
+            v-for="s in mcpServers"
+            :key="s.name"
+            :server="s"
+            @reconnect="reconnectMcp"
+            @edit="editMcpServer"
+            @remove="removeMcpServer"
+          />
+        </div>
+        <div v-else class="list-empty">暂无 MCP 服务器。添加一个来扩展 AI 能力。</div>
+
+        <div class="tab-actions">
+          <button class="tab-btn primary" @click="showMcpForm = true">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            添加服务器
+          </button>
+          <button class="tab-btn" @click="showMcpMarket = !showMcpMarket">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            浏览市场
+          </button>
+          <button class="tab-btn" @click="mcpFileInput?.click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            上传 .json
+          </button>
+          <input ref="mcpFileInput" type="file" accept=".json" class="hidden-input" @change="onMcpFilePicked" />
+        </div>
+        <div v-if="mcpUploadMsg" :class="['upload-msg', mcpUploadOk ? 'ok' : 'fail']">{{ mcpUploadMsg }}</div>
+
+        <!-- MCP Form modal -->
+        <McpServerForm
+          v-if="showMcpForm"
+          :editing="editingMcp"
+          :initial-name="editingMcpName"
+          :initial-config="editingMcpConfig"
+          @close="closeMcpForm"
+          @save="saveMcpServer"
+        />
+
+        <!-- MCP Marketplace -->
+        <div v-if="showMcpMarket" class="market-section">
+          <div class="market-divider"></div>
+          <McpMarketplace @installed="onMcpInstalled" />
+        </div>
+      </template>
+
+      <!-- Skills -->
+      <template v-else-if="currentTab === 'skills'">
+        <h2>技能</h2>
+        <p class="sub">管理 Skills — AI 可自动调用的专业指令集</p>
+
+        <div v-if="skillStore.loading.value" class="list-loading">加载技能列表...</div>
+        <div v-else-if="installedSkills.length" class="skills-list">
+          <SkillCard
+            v-for="s in installedSkills"
+            :key="s.slug"
+            :skill="s"
+            @view="viewSkill"
+            @delete="removeSkill"
+          />
+        </div>
+        <div v-else class="list-empty">暂无技能。浏览市场或上传 SKILL.md 文件来添加。</div>
+
+        <div class="tab-actions">
+          <button class="tab-btn" @click="showSkillMarket = !showSkillMarket">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            浏览市场
+          </button>
+          <button class="tab-btn" @click="skillFileInput?.click()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            上传 SKILL.md
+          </button>
+          <input ref="skillFileInput" type="file" accept=".md" class="hidden-input" @change="onSkillFilePicked" />
+        </div>
+        <div v-if="skillUploadMsg" :class="['upload-msg', skillUploadOk ? 'ok' : 'fail']">{{ skillUploadMsg }}</div>
+
+        <!-- Skill Marketplace -->
+        <div v-if="showSkillMarket" class="market-section">
+          <div class="market-divider"></div>
+          <SkillMarketplace @installed="onSkillInstalled" />
+        </div>
+
+        <!-- Skill view modal -->
+        <div v-if="viewingSkill" class="mcp-form-overlay" @click.self="viewingSkill = null">
+          <div class="mcp-form-modal" style="width:520px">
+            <div class="mfp-header">
+              <h3>/{{ viewingSkill.slug }}</h3>
+              <button class="mfp-close" @click="viewingSkill = null">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+            <div class="mfp-body">
+              <div class="skill-detail-meta">
+                <span class="skill-detail-desc">{{ viewingSkill.description }}</span>
+                <span v-if="viewingSkill.source" class="sc-source">{{ viewingSkill.source }}</span>
+                <span v-if="viewingSkill.agent" class="sc-source">agent: {{ viewingSkill.agent }}</span>
+              </div>
+              <pre class="skill-detail-body">{{ viewingSkill.body || '(No body content)' }}</pre>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- Default -->
       <template v-else>
         <h2>{{ t('settingsTitle') }}</h2>
@@ -148,13 +258,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useChatStore } from '../../store/chatStore.js'
 import { loadSMTPConfig, saveSMTPConfig } from '../../utils/email.js'
 import { useI18n } from '../../composables/useI18n.js'
 import { conversations as convApi } from '../../api/index.js'
+import { useMcpStore } from '../../stores/mcpStore.js'
+import { useSkillStore } from '../../stores/skillStore.js'
+import McpServerCard from '../mcp/McpServerCard.vue'
+import McpServerForm from '../mcp/McpServerForm.vue'
+import McpMarketplace from '../mcp/McpMarketplace.vue'
+import SkillCard from '../skills/SkillCard.vue'
+import SkillMarketplace from '../skills/SkillMarketplace.vue'
 
 const { t } = useI18n()
+const mcpStore = useMcpStore()
+const skillStore = useSkillStore()
 
 const props = defineProps({ tab: String })
 defineEmits(['close'])
@@ -271,10 +390,146 @@ function saveSMTP() {
   setTimeout(() => smtpSaved.value = false, 2000)
 }
 
+// MCP state
+const showMcpForm = ref(false)
+const showMcpMarket = ref(false)
+const editingMcp = ref(false)
+const editingMcpName = ref('')
+const editingMcpConfig = ref({})
+const mcpServers = computed(() => mcpStore.servers.value)
+
+// Skills state
+const showSkillMarket = ref(false)
+const viewingSkill = ref(null)
+const installedSkills = computed(() => skillStore.skills.value)
+
+async function loadMcpData() {
+  await mcpStore.loadServers(null)
+}
+
+async function loadSkillsData() {
+  await skillStore.loadSkills(null)
+}
+
+async function reconnectMcp(name) {
+  await mcpStore.reconnectServer(name, null)
+}
+
+function editMcpServer(name) {
+  const server = mcpServers.value.find(s => s.name === name)
+  if (!server) return
+  editingMcp.value = true
+  editingMcpName.value = name
+  editingMcpConfig.value = server.config || {}
+  showMcpForm.value = true
+}
+
+async function removeMcpServer(name) {
+  if (!confirm(`Remove MCP server "${name}"?`)) return
+  await mcpStore.deleteServer(name, null)
+}
+
+function closeMcpForm() {
+  showMcpForm.value = false
+  editingMcp.value = false
+  editingMcpName.value = ''
+  editingMcpConfig.value = {}
+}
+
+async function saveMcpServer({ name, config }) {
+  if (editingMcp.value) {
+    await mcpStore.updateServer(name, config, null)
+  } else {
+    await mcpStore.addServer(name, config, null)
+  }
+  closeMcpForm()
+}
+
+function onMcpInstalled() {
+  loadMcpData()
+}
+
+function viewSkill(slug) {
+  const skill = installedSkills.value.find(s => s.slug === slug)
+  if (skill) {
+    // Fetch full skill body
+    import('../../api/skills.api.js').then(({ skillsApi }) => {
+      skillsApi.getSkill(slug).then(data => {
+        viewingSkill.value = data?.skill || skill
+      }).catch(() => {
+        viewingSkill.value = skill
+      })
+    })
+  }
+}
+
+async function removeSkill(slug) {
+  if (!confirm(`Delete skill "/${slug}"?`)) return
+  await skillStore.deleteSkill(slug, null)
+}
+
+function onSkillInstalled() {
+  loadSkillsData()
+}
+
+// MCP file upload state
+const mcpFileInput = ref(null)
+const mcpUploadMsg = ref('')
+const mcpUploadOk = ref(false)
+
+async function onMcpFilePicked(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  mcpUploadMsg.value = ''
+  try {
+    const text = await file.text()
+    const { mcpApi } = await import('../../api/mcp.api.js')
+    const result = await mcpApi.uploadConfig(file.name, text, null)
+    mcpUploadMsg.value = `Imported ${result.added} server(s): ${(result.servers || []).join(', ')}`
+    mcpUploadOk.value = true
+    await loadMcpData()
+  } catch (e) {
+    mcpUploadMsg.value = e.message || 'Upload failed'
+    mcpUploadOk.value = false
+  } finally {
+    if (mcpFileInput.value) mcpFileInput.value.value = ''
+  }
+}
+
+// Skills file upload state
+const skillFileInput = ref(null)
+const skillUploadMsg = ref('')
+const skillUploadOk = ref(false)
+
+async function onSkillFilePicked(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  skillUploadMsg.value = ''
+  try {
+    const text = await file.text()
+    const { skillsApi } = await import('../../api/skills.api.js')
+    const result = await skillsApi.uploadSkillFile(file.name, text, null)
+    skillUploadMsg.value = `Installed: /${result.slug}`
+    skillUploadOk.value = true
+    await loadSkillsData()
+  } catch (e) {
+    skillUploadMsg.value = e.message || 'Upload failed'
+    skillUploadOk.value = false
+  } finally {
+    if (skillFileInput.value) skillFileInput.value.value = ''
+  }
+}
+
+// Load MCP and Skills data when these tabs open
+watch(() => props.tab, (newTab) => {
+  if (newTab === 'mcp') loadMcpData()
+  if (newTab === 'skills') loadSkillsData()
+})
+
 onMounted(() => {
+  // Original: API key + SMTP
   store.loadApiKey()
   keyMode.value = localStorage.getItem('key_mode') || (store.apikey ? 'own' : 'builtin')
-  // Never pre-fill the key from store in builtin mode
   apiKeyVal.value = keyMode.value === 'own' ? store.apikey : ''
   const c = loadSMTPConfig()
   if (c) {
@@ -283,6 +538,9 @@ onMounted(() => {
     smtpUser.value = c.user || ''
     smtpPass.value = c.pass || ''
   }
+  // MCP + Skills
+  if (props.tab === 'mcp') loadMcpData()
+  if (props.tab === 'skills') loadSkillsData()
 })
 </script>
 
@@ -476,4 +734,37 @@ select.form-input { cursor: pointer; appearance: auto; padding-right: 28px; }
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+
+/* MCP & Skills tabs */
+.list-loading { text-align: center; color: var(--text3); font-size: 13px; font-weight: 300; padding: 20px; }
+.list-empty { text-align: center; color: var(--text3); font-size: 12px; font-weight: 300; padding: 16px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.tab-actions { display: flex; gap: 8px; margin-top: 12px; }
+.tab-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); font-size: 12px; font-family: inherit; font-weight: 400;
+  cursor: pointer; transition: all .12s;
+}
+.tab-btn:hover { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+.tab-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-btn.primary:hover { background: var(--accent-hover); }
+.market-section { margin-top: 0; }
+.market-divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* Skill detail in modal */
+.skill-detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
+.skill-detail-desc { font-size: 12px; color: var(--text2); font-weight: 300; flex: 1; }
+.sc-source { font-size: 10px; padding: 2px 7px; border-radius: var(--radius-full); background: var(--bg4); color: var(--text2); }
+.skill-detail-body {
+  font-size: 12px; font-family: var(--font-mono); color: var(--text2);
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+  line-height: 1.5; margin: 0;
+}
+
+.upload-msg { font-size: 11px; font-weight: 300; margin-top: 8px; }
+.upload-msg.ok { color: var(--green); }
+.upload-msg.fail { color: var(--red); }
+.hidden-input { display: none; }
 </style>

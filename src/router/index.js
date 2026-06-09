@@ -47,6 +47,11 @@ const routes = [
     path: '/collections',
     name: 'collections',
     component: () => import('../pages/CollectionsView.vue')
+  },
+  {
+    path: '/mcp-skills',
+    name: 'mcp-skills',
+    component: () => import('../pages/McpSkillsView.vue')
   }
 ]
 

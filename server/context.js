@@ -69,6 +69,7 @@ function buildSystemPrompt(options = {}) {
     workspaceRoot = process.cwd(),
     projectContext = [],
     memoryPrompt = '',
+    skillsPrompt = '',
     permissionMode = 'default',
     tools = []
   } = options
@@ -155,6 +156,12 @@ For each task, follow this order:
   // ─── Part 5: Memory Instructions (from memory.js) ───
   if (memoryPrompt) {
     prompt += `\n## Memory System\n${memoryPrompt}\n`
+  }
+
+  // ─── Part 5b: Skills ───
+  if (skillsPrompt) {
+    prompt += `\n${skillsPrompt}\n`
+    prompt += `\n**How to use skills**: Call the Skill tool with the skill name (e.g., "commit" for /commit). The skill's instructions will be expanded and added to the conversation. Use skills proactively when they match the user's intent.\n`
   }
 
   // ─── Part 6: Anti-Loop Rules ───

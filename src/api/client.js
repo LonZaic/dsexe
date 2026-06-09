@@ -30,10 +30,10 @@ client.interceptors.request.use(config => {
 // ─── Response interceptor: unwrap & handle errors ───
 client.interceptors.response.use(
   response => {
-    // Unwrap { success: true, data: ... } format
     const body = response.data
     if (body && typeof body === 'object' && 'success' in body) {
-      return body.data
+      // If server wraps in { success, data }, unwrap. Otherwise return body as-is.
+      return 'data' in body ? body.data : body
     }
     return body
   },

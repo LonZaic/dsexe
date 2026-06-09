@@ -23,6 +23,9 @@ const { buildSystemPrompt, estimateTokenCount, shouldCompact, compactHistory, re
 const { checkToolPermission, classifyCommand, loadPermissionRules, MODES } = require('./permissions')
 const { loadHooks, executePreToolUse, executePostToolUse, executePostAgentStop, executeUserPromptSubmit } = require('./hooks')
 const { ensureMemDir, getMemoryPrompt, findRelevantMemories, extractMemoriesFromConversation, MEMORY_DIR } = require('./memory')
+const { loadAllMcpTools, executeMcpTool } = require('../mcp/client')
+const { getSkillsPrompt } = require('../skills/skillLoader')
+const { BUILTIN_DEFS, executeBuiltinTool } = require('../tools/builtinTools')
 
 // ─── Config ───
 const MAX_ROUNDS_BEFORE_COMPACT = 40   // compact & auto-continue at this round
@@ -186,6 +189,21 @@ const TOOLS = [
         required: ['query']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'skill',
+      description: 'Invoke a skill by name. Skills are specialized instruction guides that expand when called. Use this when a skill matches the user\'s intent.',
+      parameters: {
+        type: 'object',
+        properties: {
+          skill: { type: 'string', description: 'Skill name without leading slash. E.g. commit, review, plan' },
+          args: { type: 'string', description: 'Optional arguments for the skill' }
+        },
+        required: ['skill']
+      }
+    }
   }
 ]
 
@@ -328,6 +346,19 @@ const executors = {
 
   web_search(args) {
     return duckDuckGoSearch(args.query)
+  },
+
+  skill(args) {
+    try {
+      const { getSkillBody } = require('../skills/skillLoader')
+      const skill = getSkillBody(process.cwd(), args.skill)
+      if (!skill) return `未知技能: ${args.skill}`
+      let content = `技能目录: ${skill.dir}\n\n${skill.body}`
+      if (args.args) content = `参数: ${args.args}\n\n${content}`
+      return `[SKILL: /${args.skill}]\n\n${content}\n\n---\n执行以上技能指令。`
+    } catch (e) {
+      return `技能调用错误: ${e.message}`
+    }
   }
 }
 
@@ -364,6 +395,24 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
   }
 
   onProgress({ type: 'start', task, mode: permissionMode })
+
+  // ─── Load MCP tools ───
+  let mcpTools = []
+  try {
+    mcpTools = await loadAllMcpTools(process.cwd())
+    if (mcpTools.length > 0) {
+      onProgress({ type: 'info', text: `已加载 ${mcpTools.length} 个 MCP 工具` })
+    }
+  } catch (e) {
+    onProgress({ type: 'warning', text: 'MCP 工具加载失败: ' + e.message })
+  }
+  const allTools = [...TOOLS, ...BUILTIN_DEFS, ...mcpTools]
+
+  // ─── Load Skills prompt ───
+  let skillsPrompt = ''
+  try {
+    skillsPrompt = getSkillsPrompt(process.cwd(), null)
+  } catch {} // Skills are optional
 
   // ─── Step 1: UserPromptSubmit hooks ───
   const hookResult = await executeUserPromptSubmit(hooksConfig, task, agentContext)
@@ -422,8 +471,9 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
     workspaceRoot,
     projectContext,
     memoryPrompt,
+    skillsPrompt,
     permissionMode,
-    tools: TOOLS
+    tools: allTools
   })
 
   // ─── Step 5: Inject relevant memory content as context ───
@@ -548,7 +598,7 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
       const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3 }),
+        body: JSON.stringify({ model, messages, tools: allTools, tool_choice: 'auto', max_tokens: 32768, temperature: 0.3 }),
         signal
       })
 
@@ -583,7 +633,7 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
           const retryRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3 }),
+            body: JSON.stringify({ model, messages, tools: allTools, tool_choice: 'auto', max_tokens: 32768, temperature: 0.3 }),
             signal
           })
           if (retryRes.ok) { response = await retryRes.json(); onProgress({ type: 'thinking', text: 'Retry succeeded.' }) }
@@ -669,17 +719,27 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
       }
 
       // ─── Execute tool ───
-      const executor = executors[toolName]
       let result
-      if (!executor) {
-        result = `Unknown tool: ${toolName}. Available: ${Object.keys(executors).join(', ')}`
-      } else {
+      if (toolName.startsWith('mcp__')) {
         try {
-          const p = await executor(args)
-          result = typeof p === 'string' ? p : JSON.stringify(p)
+          result = await executeMcpTool(toolName, args, process.cwd())
         } catch (e) {
-          result = `Tool error: ${e.message}`
-          loopDetector.recordError(result)
+          result = `MCP 工具执行错误: ${e.message}`
+        }
+      } else if (['fetch_url','weather','time','github','notion','sqlite','docker','amap'].includes(toolName)) {
+        result = await executeBuiltinTool(toolName, args)
+      } else {
+        const executor = executors[toolName]
+        if (!executor) {
+          result = `Unknown tool: ${toolName}. Available: ${Object.keys(executors).join(', ')}`
+        } else {
+          try {
+            const p = await executor(args)
+            result = typeof p === 'string' ? p : JSON.stringify(p)
+          } catch (e) {
+            result = `Tool error: ${e.message}`
+            loopDetector.recordError(result)
+          }
         }
       }
 
@@ -793,7 +853,7 @@ async function forceFinalResponse(messages, apiKey, model, onProgress) {
     const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: summaryMessages, max_tokens: 1024, temperature: 0.3 }),
+      body: JSON.stringify({ model, messages: summaryMessages, max_tokens: 8192, temperature: 0.3 }),
     })
     const data = await res.json()
     return data.choices?.[0]?.message?.content || 'Agent reached max rounds. Check workspace for results.'

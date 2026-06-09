@@ -3,11 +3,11 @@
 // Ported from CC's query/tokenBudget.ts pattern
 // ══════════════════════════════════════════════════════
 
-const DEFAULT_BUDGET = 200000       // total token budget per agent run
-const NUDGE_THRESHOLD = 0.75        // 75% → warn
-const FORCE_THRESHOLD = 0.90        // 90% → force stop
+const DEFAULT_BUDGET = 800000       // total token budget per agent run (1M context, leave margin)
+const NUDGE_THRESHOLD = 0.85        // 85% → warn
+const FORCE_THRESHOLD = 0.95        // 95% → force stop
 const DIMINISHING_WINDOW = 3        // check last N rounds for diminishing returns
-const DIMINISHING_THRESHOLD = 500   // if per-round output drops below this, consider stopping
+const DIMINISHING_THRESHOLD = 1000   // if per-round output drops below this, consider stopping
 
 /**
  * Create a token budget tracker for one agent run.

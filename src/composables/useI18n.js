@@ -321,6 +321,20 @@ const L = {
   codePlanDone:    ['规划完成', '規劃完成', '規劃完成', 'Planning done'],
   codeStepDone:    ['完成步骤', '完成步驟', '完成步驟', 'Step done'],
   codeHandoff:     ['上下文使用率较高，准备接力...', '上下文使用率較高，準備接力...', '上下文使用率較高，準備接力...', 'Context usage high, preparing handoff...'],
+
+  // ── MCP ──
+  mcpTabTitle:     ['MCP 服务器', 'MCP 伺服器', 'MCP 伺服器', 'MCP Servers'],
+  mcpTabSub:       ['管理 Model Context Protocol 服务器，扩展 AI 能力。', '管理 Model Context Protocol 伺服器，擴展 AI 能力。', '管理 Model Context Protocol 伺服器，擴展 AI 能力。', 'Manage MCP servers to extend AI capabilities.'],
+  mcpSidebar:      ['MCP/Skills', 'MCP/Skills', 'MCP/Skills', 'MCP/Skills'],
+
+  // ── Skills ──
+  skillsTabTitle:  ['Skills', 'Skills', 'Skills', 'Skills'],
+  skillsTabSub:    ['管理 Skills — AI 可自动调用的专业指令集。', '管理 Skills — AI 可自動調用的專業指令集。', '管理 Skills — AI 可自動調用的專業指令集。', 'Manage Skills — specialized instructions that AI can invoke automatically.'],
+  capabilityBtn:   ['能力', '能力', '能力', 'Capabilities'],
+
+  // ── MCP/Skills page ──
+  mcpSkillsTitle:  ['MCP 与 Skills', 'MCP 與 Skills', 'MCP 與 Skills', 'MCP & Skills'],
+  mcpSkillsSub:    ['管理 AI 扩展能力：MCP 服务器和 Skills 指令集。', '管理 AI 擴展能力：MCP 伺服器和 Skills 指令集。', '管理 AI 擴展能力：MCP 伺服器和 Skills 指令集。', 'Manage AI extensions: MCP servers and Skills.'],
 }
 
 // ═══════════════════════════════════════════

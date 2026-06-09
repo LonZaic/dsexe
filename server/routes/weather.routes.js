@@ -42,15 +42,51 @@ router.get('/weather', async (req, res) => {
       longitude = parseFloat(lon)
       cityName = city || `${lat},${lon}`
     } else if (city) {
-      const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh`
-      const geo = await fetchJSON(geoUrl)
-      if (!geo.results?.length) {
-        return res.status(404).json({ error: '未找到该城市' })
+      // ─── Clean input ───
+      let q = city.trim()
+        .replace(/[度°]/, '')                          // "30°" → "30"
+        .replace(/[天气预报气温温度湿度]$/, '')          // "佛山天气" → "佛山"
+        .replace(/[今明后昨大][天日]/, '')               // "佛山明天" → "佛山"
+        .replace(/[的早晚上下周]/, '')                   // "佛山今晚" → "佛山"
+        .replace(/^[省市]$/g, '')                        // remove bare "省""市"
+        .trim()
+      if (!q) q = city.trim()
+
+      async function geocode(query) {
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=zh`
+        const d = await fetchJSON(url)
+        return d.results?.[0] || null
       }
-      const r = geo.results[0]
-      latitude = r.latitude
-      longitude = r.longitude
-      cityName = r.name + (r.admin1 ? `, ${r.admin1}` : '') + (r.country ? `, ${r.country}` : '')
+
+      let result = await geocode(q)
+
+      // ─── Fallback chain ───
+      if (!result) {
+        const candidates = []
+
+        // "广东佛山" → try last 2 chars "佛山"
+        if (q.length > 3) candidates.push(q.slice(-2))
+        // "广州市天河区" → strip 市/区 → "广州天河" → try each
+        const stripped = q.replace(/[市 ]/g, '').replace(/[区]$/, '')
+        if (stripped !== q) candidates.push(stripped)
+        // "佛山南海" → try first 2 chars "佛山"
+        if (q.length > 2 && q.length <= 5) candidates.push(q.slice(0, 2))
+        // "南海" or 3+ chars that are still failing → try prepending "广州" or search as-is with count=5
+        if (q.length <= 3) candidates.push(q)
+
+        for (const c of [...new Set(candidates)]) {
+          result = await geocode(c)
+          if (result) break
+        }
+      }
+
+      if (!result) {
+        return res.status(404).json({ error: `未找到该城市: ${city}` })
+      }
+
+      latitude = result.latitude
+      longitude = result.longitude
+      cityName = result.name + (result.admin1 ? `, ${result.admin1}` : '') + (result.country ? `, ${result.country}` : '')
     } else {
       return res.status(400).json({ error: '请提供 city 或 lat/lon 参数' })
     }

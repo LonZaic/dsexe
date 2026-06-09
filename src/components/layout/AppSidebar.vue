@@ -48,19 +48,15 @@
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M4 2h7l2 2v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/><path d="M5 6l2 2-2 2M8 10h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         {{ t('code') }}
       </button>
-      <button class="nav-item" @click="openSettings('api')">
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M2 4h11M2 7.5h6M2 11h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="11.5" cy="10" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13.5 12l1 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        {{ t('apiKey') }}
-        <span class="api-warn" v-if="needKeyWarning">请填写</span>
-        <span class="api-ok" v-else-if="!needKeyWarning">已配置</span>
-      </button>
-      <button class="nav-item" @click="openSettings('email')">
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="1.5" y="3.5" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 5l6 4 6-4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        {{ t('email') }}
-      </button>
-      <button class="nav-item" @click="openSettings('data')">
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="2" y="1.5" width="11" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 5h11" stroke="currentColor" stroke-width="1.3"/><circle cx="5.5" cy="3.5" r=".7" fill="currentColor"/><circle cx="8" cy="3.5" r=".7" fill="currentColor"/></svg>
-        {{ t('dataTabTitle') }}
+      <button class="nav-item" :class="{ active: route.path === '/mcp-skills' }" @click="$router.push('/mcp-skills')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <circle cx="18" cy="6" r="1.5" fill="currentColor" opacity=".5"/>
+          <circle cx="18" cy="12" r="1.5" fill="currentColor" opacity=".5"/>
+          <circle cx="18" cy="18" r="1.5" fill="currentColor" opacity=".5"/>
+        </svg>
+        {{ t('mcpSidebar') }}
       </button>
       <button class="nav-item" :class="{ active: isSocialActive }" @click="$router.push('/social')">
         <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="5.5" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="11" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M1 13c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M11 8c1.7 0 3 1.2 3 2.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -155,35 +151,14 @@
         </Transition>
       </div>
 
-      <!-- ═══ Language Switcher Dropdown ═══ -->
-      <div class="lang-switcher" ref="langSwitcherRef">
-        <button class="lang-btn" @click="showLangMenu = !showLangMenu" :title="t('switchLang')">
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <circle cx="7.5" cy="7.5" r="6" stroke="currentColor" stroke-width="1.2"/>
-            <ellipse cx="7.5" cy="7.5" rx="2.8" ry="6" stroke="currentColor" stroke-width="1.2"/>
-            <path d="M1.5 7.5h12M7.5 1.5v12" stroke="currentColor" stroke-width="0.9" stroke-linecap="round"/>
-          </svg>
-          <span class="lang-label">{{ currentLangLabel }}</span>
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="lang-chevron" :class="{ open: showLangMenu }">
-            <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <Transition name="lang-drop">
-          <div v-if="showLangMenu" class="lang-menu" @click.stop>
-            <button
-              v-for="m in LANG_META"
-              :key="m.code"
-              :class="['lang-option', { active: lang === m.code }]"
-              @click="selectLang(m.code)"
-            >
-              <span class="lang-option-name">{{ isZh ? m.native : m.en }}</span>
-              <svg v-if="lang === m.code" width="14" height="14" viewBox="0 0 14 14" fill="none" class="lang-check">
-                <path d="M3 7.5l2.5 2.5L11 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-        </Transition>
-      </div>
+      <!-- ═══ Settings ═══ -->
+      <button class="lang-btn" @click="openSettings()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+          <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        <span>设置</span>
+      </button>
 
       <template v-if="loggedIn">
         <div class="user-row">
@@ -221,7 +196,7 @@ const route = useRoute()
 const store = useChatStore()
 const agStore = useAgentConversationStore()
 const codeStore = useCodeStore()
-const { t, lang, setLang, langDisplay, LANG_META, isZh } = useI18n()
+const { t } = useI18n()
 
 const isAgentRoute = computed(() => route.path === '/agent')
 const isCodeRoute = computed(() => route.path === '/code')
@@ -232,8 +207,6 @@ const keyMode = ref('builtin')
 const needKeyWarning = computed(() => keyMode.value === 'own' && !apiKeySet.value)
 const openSettings = inject('openSettings')
 
-const showLangMenu = ref(false)
-const langSwitcherRef = ref(null)
 const searchQuery = ref('')
 const renaming = ref(false)
 const renameId = ref(null)
@@ -242,8 +215,6 @@ const renameRef = ref(null)
 const deleting = ref(null)  // { id, title } or null
 
 const isSocialActive = computed(() => ['/social','/friends','/groups','/dm','/group'].some(p => route.path.startsWith(p)))
-
-const currentLangLabel = computed(() => langDisplay(lang.value))
 
 const userName = computed(() => { try { return JSON.parse(localStorage.getItem('bbot_user')).name } catch { return null } })
 
@@ -320,7 +291,6 @@ function formatDate(d) {
 }
 function doLogout() { logout(); disconnect(); loggedIn.value = false; router.push('/') }
 
-function selectLang(code) { setLang(code); showLangMenu.value = false }
 
 // ─── Rename ───
 function startRename(conv) {
@@ -372,13 +342,6 @@ async function doDelete() {
 // ─── Context menu ───
 function openCtxMenu(e, conv) { /* reserved for future */ }
 
-// Close lang menu on outside click
-function onOutsideClick(e) {
-  if (showLangMenu.value && langSwitcherRef.value && !langSwitcherRef.value.contains(e.target)) {
-    showLangMenu.value = false
-  }
-}
-
 onMounted(() => {
   store.loadApiKey(); store.loadConversations()
   agStore.loadConversations()
@@ -386,7 +349,6 @@ onMounted(() => {
   keyMode.value = localStorage.getItem('key_mode') || 'builtin'
   loggedIn.value = isLoggedIn()
   setInterval(() => { loggedIn.value = isLoggedIn(); apiKeySet.value = store.apikey.length > 0; keyMode.value = localStorage.getItem('key_mode') || 'builtin' }, 2000)
-  document.addEventListener('click', onOutsideClick)
 })
 
 // Reload agent conversations when entering agent route
@@ -394,9 +356,6 @@ watch(isAgentRoute, (v) => {
   if (v) agStore.loadConversations()
 })
 
-onUnmounted(() => {
-  document.removeEventListener('click', onOutsideClick)
-})
 </script>
 
 <style scoped>

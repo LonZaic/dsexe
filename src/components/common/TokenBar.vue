@@ -1,13 +1,14 @@
 <template>
   <div class="tk-bar">
-    <!-- Token usage: used / context window -->
+    <!-- Token usage: display (context-aware) / context window -->
     <div class="tk-item" :title="tokenTooltip">
       <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><rect x="1" y="1" width="9" height="9" rx="2" stroke="currentColor" stroke-width=".9"/><line x1="3.5" y1="3.5" x2="7.5" y2="3.5" stroke="currentColor" stroke-width=".7"/><line x1="3.5" y1="5.5" x2="6.5" y2="5.5" stroke="currentColor" stroke-width=".7"/><line x1="3.5" y1="7.5" x2="5.5" y2="7.5" stroke="currentColor" stroke-width=".7"/></svg>
-      <span class="tk-val">{{ fmtNum(totalTokens) }}</span>
+      <span class="tk-val">{{ fmtNum(displayTokens) }}</span>
+      <span v-if="isCompressed" class="tk-compressed" title="上下文已压缩，实际占用低于累计用量"> ↻</span>
       <span class="tk-unit"> / {{ fmtNum(contextLimit) }}</span>
     </div>
 
-    <!-- Progress bar — relative to model context window -->
+    <!-- Progress bar — relative to model context window, uses context-aware displayTokens -->
     <div class="tk-bar-wrap">
       <div class="tk-bar-fill" :style="{ width: pct + '%' }" :class="{ warn: pct > 50, danger: pct > 80 }"></div>
     </div>
@@ -39,6 +40,8 @@ const props = defineProps({
   promptTokens: { type: Number, default: 0 },
   completionTokens: { type: Number, default: 0 },
   totalTokens: { type: Number, default: 0 },
+  contextTokens: { type: Number, default: 0 }, // actual context usage (goes down after compression)
+  compressed: { type: Boolean, default: false }, // true when context was compressed
   /** @deprecated 使用模型真实上下文窗口，此 prop 仅在特殊覆盖时使用 */
   maxTokens: { type: Number, default: 0 },
   model: { type: String, default: 'deepseek-v4-pro' },
@@ -136,22 +139,33 @@ const costTooltip = computed(() => {
 })
 
 // ─── 进度条 (相对于上下文窗口) ───
+// Use contextTokens (actual context usage) when provided, otherwise fall back to totalTokens
+const displayTokens = computed(() => props.contextTokens > 0 ? props.contextTokens : props.totalTokens)
+// True when compression has happened — bar has retracted, showing freed context space
+const isCompressed = computed(() => props.compressed && props.contextTokens > 0)
+
 const pct = computed(() => {
   const limit = contextLimit.value
   if (limit <= 0) return 0
-  return Math.min(100, Math.round((props.totalTokens / limit) * 1000) / 10)
+  return Math.min(100, Math.round((displayTokens.value / limit) * 1000) / 10)
 })
 
 // ─── Token 详情 tooltip ───
 const tokenTooltip = computed(() => {
-  return [
-    '已用 token: ' + fmtNum(props.totalTokens),
+  const lines = [
+    '会话累计: ' + fmtNum(props.totalTokens),
     '  输入: ' + fmtNum(props.promptTokens),
     '  输出: ' + fmtNum(props.completionTokens),
+  ]
+  if (props.contextTokens > 0) {
+    lines.push('当前上下文占用: ' + fmtNum(props.contextTokens) + ' (压缩后)')
+  }
+  lines.push(
     '上下文窗口: ' + fmtNum(contextLimit.value),
     '使用率: ' + pct.value.toFixed(1) + '%',
     pct.value > 80 ? '[!] 上下文接近上限，建议新开会话' : ''
-  ].filter(Boolean).join('\n')
+  )
+  return lines.filter(Boolean).join('\n')
 })
 
 // ─── 余额 ───

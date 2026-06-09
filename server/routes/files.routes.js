@@ -10,18 +10,21 @@ const DOWNLOADS_DIR = path.join(__dirname, '..', 'workspace', 'downloads')
 if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR, { recursive: true })
 
 // Clean up files older than 1 hour on startup
-function cleanupOldFiles() {
+function cleanupOldFiles(dir = DOWNLOADS_DIR) {
   try {
     const now = Date.now()
-    const files = fs.readdirSync(DOWNLOADS_DIR)
+    const files = fs.readdirSync(dir)
     for (const f of files) {
-      const fp = path.join(DOWNLOADS_DIR, f)
+      const fp = path.join(dir, f)
       const stat = fs.statSync(fp)
       if (now - stat.mtimeMs > 3600000) fs.unlinkSync(fp)
     }
   } catch {}
 }
 cleanupOldFiles()
+const TEMPLATES_DIR = path.join(__dirname, '..', 'workspace', 'templates')
+if (!fs.existsSync(TEMPLATES_DIR)) fs.mkdirSync(TEMPLATES_DIR, { recursive: true })
+cleanupOldFiles(TEMPLATES_DIR)
 
 // Sanitize filename — prevent path traversal, allow only safe chars
 function safeFilename(name) {
@@ -410,12 +413,132 @@ router.get('/files/download/:name', (req, res) => {
       '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
       '.ts': 'text/typescript', '.py': 'text/x-python-script', '.java': 'text/x-java-source',
       '.cpp': 'text/x-c++src', '.c': 'text/x-csrc',
+      '.drawio': 'application/xml', '.xml': 'application/xml',
     }
     const mime = mimeMap[ext] || 'application/octet-stream'
     res.setHeader('Content-Type', mime)
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name.replace(/^\w+_/, ''))}`)
     fs.createReadStream(filePath).pipe(res)
   } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ═══ Word Template Fill ═══
+
+// Upload a .docx template to server
+router.post('/files/upload-template', async (req, res) => {
+  try {
+    const { data, filename } = req.body
+    if (!data) return res.status(400).json({ error: 'Missing template data' })
+    const safeName = safeFilename(filename || 'template.docx')
+    const id = crypto.randomBytes(8).toString('hex')
+    const storedName = `${id}_${safeName}`
+    const filePath = path.join(TEMPLATES_DIR, storedName)
+    const base64 = data.replace(/^data:[^;]+;base64,/, '')
+    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'))
+    res.json({ templateId: storedName, filename: safeName })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Parse a template to extract placeholders
+router.post('/files/parse-template', async (req, res) => {
+  try {
+    const { templateId } = req.body
+    if (!templateId) return res.status(400).json({ error: 'Missing templateId' })
+    const filePath = path.join(TEMPLATES_DIR, safeFilename(templateId))
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Template not found or expired. Please re-upload.' })
+    }
+    const PizZip = require('pizzip')
+    const content = fs.readFileSync(filePath)
+    const zip = new PizZip(content)
+    const fullText = zip.file('word/document.xml')?.asText() || ''
+    // Extract {xxx} text placeholders
+    const textTags = (fullText.match(/\{[a-zA-Z_一-鿿][a-zA-Z0-9_一-鿿]*\}/g) || [])
+      .filter(t => !t.startsWith('{%'))  // exclude docxtemplater image tags
+      .map(t => t.slice(1, -1))
+    // Extract {%xxx} image placeholders
+    const imageTags = (fullText.match(/\{%[a-zA-Z_一-鿿][a-zA-Z0-9_一-鿿]*\}/g) || [])
+      .map(t => t.slice(2, -1))
+    res.json({ textPlaceholders: [...new Set(textTags)], imagePlaceholders: [...new Set(imageTags)], templateId })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Fill a template with content and images
+router.post('/files/fill-template', async (req, res) => {
+  try {
+    const { templateId, content, images } = req.body
+    if (!templateId) return res.status(400).json({ error: 'Missing templateId' })
+    const filePath = path.join(TEMPLATES_DIR, safeFilename(templateId))
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Template not found or expired. Please re-upload.' })
+    }
+    const PizZip = require('pizzip')
+    const Docxtemplater = require('docxtemplater')
+    const ImageModule = require('docxtemplater-image-module-free')
+
+    const templateBytes = fs.readFileSync(filePath)
+    const zip = new PizZip(templateBytes)
+
+    // Pre-process: convert {image:xxx} placeholders in XML to {%xxx} for docxtemplater
+    let docXml = zip.file('word/document.xml')?.asText() || ''
+    const inlineImgRegex = /\{image:([a-zA-Z_一-鿿][a-zA-Z0-9_一-鿿]*)\}/g
+    let hasInlineImages = false
+    docXml = docXml.replace(inlineImgRegex, (match, name) => {
+      hasInlineImages = true
+      return `{%${name}}`
+    })
+    if (hasInlineImages) {
+      zip.file('word/document.xml', docXml)
+    }
+
+    const imageList = images || []
+    const imageOpts = {
+      centered: false,
+      getImage(tagValue) {
+        const img = imageList.find(i => i.name === tagValue)
+        if (!img || !img.data) {
+          return Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+        }
+        return Buffer.from(img.data.replace(/^data:image\/\w+;base64,/, ''), 'base64')
+      },
+      getSize() { return [400, 300] }
+    }
+
+    const doc = new Docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      modules: [new ImageModule(imageOpts)]
+    })
+
+    doc.setData(content || {})
+    try {
+      doc.render()
+    } catch (renderErr) {
+      return res.status(400).json({
+        status: 'error',
+        error: 'Template fill failed',
+        detail: renderErr.message,
+        hint: '请检查占位符名称是否与模板完全一致，或是否有缺失的字段。'
+      })
+    }
+
+    const outputBuf = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' })
+    const outputName = (content?.filename || 'filled-document').replace(/\.docx$/i, '') + '.docx'
+    const safeName = safeFilename(outputName)
+    const id = crypto.randomBytes(8).toString('hex')
+    const storedName = `${id}_${safeName}`
+    const outputPath = path.join(DOWNLOADS_DIR, storedName)
+    fs.writeFileSync(outputPath, outputBuf)
+    const url = `/api/files/download/${encodeURIComponent(storedName)}`
+    res.json({ url, filename: safeName, size: fs.statSync(outputPath).size })
+  } catch (e) {
+    console.error('[fill-template]', e)
     res.status(500).json({ error: e.message })
   }
 })

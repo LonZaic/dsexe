@@ -186,6 +186,21 @@ const TOOLS = [
         required: ['query']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'skill',
+      description: 'Invoke a skill. Skills are specialized instruction sets that guide the AI through specific tasks. Use when a skill matches the user\'s intent — the skill\'s instructions will expand and provide detailed workflow guidance. Available skills are listed in the system prompt.',
+      parameters: {
+        type: 'object',
+        properties: {
+          skill: { type: 'string', description: 'The skill name (without leading slash). E.g., "commit", "review", "plan", "debug".' },
+          args: { type: 'string', description: 'Optional arguments passed to the skill.' }
+        },
+        required: ['skill']
+      }
+    }
   }
 ]
 
@@ -328,6 +343,19 @@ const executors = {
 
   web_search(args) {
     return duckDuckGoSearch(args.query)
+  },
+
+  skill(args) {
+    const { getSkillBody } = require('./skills/skillLoader')
+    const skill = getSkillBody(WORKSPACE_ROOT, args.skill)
+    if (!skill) return `[ERROR] Unknown skill: ${args.skill}. Use /skills to see available skills.`
+
+    const argsText = args.args || ''
+    let content = `Base directory for this skill: ${skill.dir}\n\n${skill.body}`
+    if (argsText) {
+      content = `The user provided these arguments for the skill: ${argsText}\n\n${content}`
+    }
+    return `[SKILL EXPANDED: /${args.skill}]\n\n${content}\n\n---\nFollow the skill instructions above to complete the task. Use the available tools as directed.`
   }
 }
 
@@ -418,10 +446,13 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
 
   // ─── Step 4: Build system prompt with all context ───
   const memoryPrompt = getMemoryPrompt(MEMORY_DIR)
+  const { getSkillsPrompt } = require('./skills/skillLoader')
+  const skillsPrompt = getSkillsPrompt(WORKSPACE_ROOT, null)
   const systemPrompt = buildSystemPrompt({
     workspaceRoot,
     projectContext,
     memoryPrompt,
+    skillsPrompt,
     permissionMode,
     tools: TOOLS
   })
@@ -548,7 +579,7 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
       const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3 }),
+        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 32768, temperature: 0.3 }),
         signal
       })
 
@@ -583,7 +614,7 @@ async function runAgent({ task, apiKey, model = 'deepseek-v4-pro', onProgress, s
           const retryRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3 }),
+            body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: 'auto', max_tokens: 32768, temperature: 0.3 }),
             signal
           })
           if (retryRes.ok) { response = await retryRes.json(); onProgress({ type: 'thinking', text: 'Retry succeeded.' }) }
@@ -780,7 +811,7 @@ async function forceFinalResponse(messages, apiKey, model, onProgress) {
     const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: summaryMessages, max_tokens: 1024, temperature: 0.3 }),
+      body: JSON.stringify({ model, messages: summaryMessages, max_tokens: 8192, temperature: 0.3 }),
     })
     const data = await res.json()
     return data.choices?.[0]?.message?.content || 'Agent reached max rounds. Check workspace for results.'

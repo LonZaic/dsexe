@@ -12,14 +12,14 @@ module.exports = {
   // API defaults
   DEFAULT_MODEL: 'deepseek-v4-pro',
   DEFAULT_FAST_MODEL: 'deepseek-v4-flash',
-  DEFAULT_MAX_TOKENS: 8192,
+  DEFAULT_MAX_TOKENS: 32768,
   DEFAULT_TEMPERATURE: 0.3,
 
   // Thinking depth presets
   THINKING_PRESETS: {
-    low: { temperature: 0.7, max_tokens: 1024 },
-    medium: { temperature: 0.3, max_tokens: 4096 },
-    high: { temperature: 0.1, max_tokens: 8192 },
+    low: { temperature: 0.7, max_tokens: 4096 },
+    medium: { temperature: 0.3, max_tokens: 16384 },
+    high: { temperature: 0.1, max_tokens: 32768 },
   },
 
   // System protected directories

@@ -104,6 +104,56 @@
       </div>
 
       <div class="toolbar-right">
+        <!-- Capabilities quick-access -->
+        <div class="toolbar-group">
+          <button
+            ref="capBtnRef"
+            class="toolbar-btn bordered"
+            :class="{ active: showCapMenu }"
+            title="MCP & Skills"
+            @click="showCapMenu = !showCapMenu"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+            <span class="toggle-label">{{ t('capabilityBtn') }}</span>
+            <span v-if="mcpToolCount" class="cap-badge">{{ mcpToolCount }}</span>
+          </button>
+          <Transition name="scale">
+            <div v-if="showCapMenu" class="cap-menu" @click.stop>
+              <div class="cap-menu-section">
+                <div class="cap-menu-hdr">技能</div>
+                <div v-if="installedSkills.length" class="cap-menu-list">
+                  <div v-for="s in installedSkills" :key="s.slug" class="cap-menu-item">
+                    <span class="cap-item-name">/{{ s.slug }}</span>
+                    <span class="cap-item-desc">{{ s.description }}</span>
+                  </div>
+                </div>
+                <div v-else class="cap-menu-empty">暂无技能</div>
+              </div>
+              <div class="cap-menu-section">
+                <div class="cap-menu-hdr">MCP 服务器</div>
+                <div v-if="mcpServers.length" class="cap-menu-list">
+                  <div v-for="s in mcpServers" :key="s.name" class="cap-menu-item">
+                    <span :class="['cap-status-dot', s.status]"></span>
+                    <span class="cap-item-name">{{ s.name }}</span>
+                    <span class="cap-item-tools">{{ s.toolCount || 0 }} 工具</span>
+                  </div>
+                </div>
+                <div v-else class="cap-menu-empty">暂无 MCP 服务器</div>
+              </div>
+              <button class="cap-menu-cta" @click="openCapSettings">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M12 7v5M12 16v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                管理 MCP 与 Skills
+              </button>
+            </div>
+          </Transition>
+        </div>
+
         <!-- Thinking depth -->
         <div class="toolbar-group">
           <button
@@ -156,11 +206,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
+import { useRouter } from 'vue-router'
 import AppIcon from '../common/AppIcon.vue'
 import { useI18n } from '../../composables/useI18n.js'
 import { fileChipStyle, fileLabel } from '../../utils/fileStyles.js'
 import { getFileCategory, getFileIcon } from '../../utils/filePreview.js'
+import { useMcpStore } from '../../stores/mcpStore.js'
+import { useSkillStore } from '../../stores/skillStore.js'
 
 // ═══ File chip helpers ═══
 function chipStyle(name, type) {
@@ -211,6 +264,21 @@ const showPlusMenu = ref(false)
 const textareaRef = ref(null)
 const fileInput = ref(null)
 const plusBtnRef = ref(null)
+
+// Capabilities menu
+const mcpStore = useMcpStore()
+const skillStore = useSkillStore()
+const showCapMenu = ref(false)
+const capBtnRef = ref(null)
+const mcpServers = computed(() => mcpStore.servers.value)
+const mcpToolCount = computed(() => mcpStore.totalToolCount.value)
+const router = useRouter()
+const installedSkills = computed(() => skillStore.skills.value?.filter(s => s.userInvocable !== false) || [])
+
+function openCapSettings() {
+  showCapMenu.value = false
+  router.push('/mcp-skills')
+}
 
 const thinkingLabel = computed(() => {
   return props.thinkingDepth === 'off' ? t('thinkOff') : t('thinkOn')
@@ -265,14 +333,21 @@ function onFileChange(e) {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-// Close plus menu on outside click
+// Close popup menus on outside click
 function onOutsideClick(e) {
   if (showPlusMenu.value && plusBtnRef.value && !plusBtnRef.value.contains(e.target)) {
     showPlusMenu.value = false
   }
+  if (showCapMenu.value && capBtnRef.value && !capBtnRef.value.contains(e.target)) {
+    showCapMenu.value = false
+  }
 }
 
-onMounted(() => document.addEventListener('click', onOutsideClick))
+onMounted(() => {
+  document.addEventListener('click', onOutsideClick)
+  mcpStore.loadServers(null)
+  skillStore.loadSkills(null)
+})
 onUnmounted(() => document.removeEventListener('click', onOutsideClick))
 
 // Expose textarea for parent
@@ -419,4 +494,37 @@ defineExpose({ textareaRef, fileInput })
 @keyframes scaleOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(.95); } }
 
 .hidden-input { display: none; }
+
+/* Capability menu */
+.cap-badge {
+  font-size: 9px; min-width: 16px; height: 16px; border-radius: var(--radius-full);
+  background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+  padding: 0 4px; font-weight: 500;
+}
+.cap-menu {
+  position: absolute; bottom: 100%; left: 0;
+  margin-bottom: 6px;
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: var(--radius); box-shadow: var(--shadow-md);
+  padding: 4px; min-width: 260px; max-width: 320px; z-index: var(--z-dropdown);
+}
+.cap-menu-section { padding: 6px 8px; }
+.cap-menu-hdr { font-size: 10px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.cap-menu-list { display: flex; flex-direction: column; gap: 2px; }
+.cap-menu-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; font-size: 11px; font-weight: 300; }
+.cap-status-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: var(--text3); }
+.cap-status-dot.connected { background: var(--green); }
+.cap-status-dot.disconnected { background: var(--red); }
+.cap-item-name { color: var(--accent); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.cap-item-desc { color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.cap-item-tools { font-size: 10px; color: var(--text3); margin-left: auto; }
+.cap-menu-empty { font-size: 11px; color: var(--text3); font-weight: 300; padding: 4px 6px; }
+.cap-menu-cta {
+  display: flex; align-items: center; gap: 6px;
+  width: calc(100% - 8px); margin: 4px; padding: 6px 8px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text2); font-size: 11px; font-family: inherit; font-weight: 400;
+  cursor: pointer; transition: all .12s;
+}
+.cap-menu-cta:hover { background: var(--bg3); color: var(--text); border-color: var(--border2); }
 </style>

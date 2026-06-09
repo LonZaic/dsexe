@@ -15,6 +15,7 @@ const { loadHooks, executePreToolUse, executePostToolUse, executePostAgentStop }
 const { checkToolPermission, classifyCommand, loadPermissionRules, MODES } = require('./permissions')
 const { loadAllMcpTools, executeMcpTool } = require('./mcp/client')
 const { getSkillsPrompt } = require('./skills/skillLoader')
+const { BUILTIN_DEFS, executeBuiltinTool } = require('./tools/builtinTools')
 const { recordEvents, loadSession, buildRecoveryPrompt } = require('./sessionRecovery')
 // subAgent imported lazily inside executeCodeTask to avoid circular dep
 
@@ -47,6 +48,7 @@ const BASE_TOOLS = [
   { type: 'function', function: { name: 'write_todos', description: 'Write/update task tracking list. Use to track progress on complex multi-step work. Each item has id, text, status (pending/in_progress/completed).', parameters: { type: 'object', properties: { todos: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, text: { type: 'string' }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['id', 'text', 'status'] } } }, required: ['todos'] } } },
   { type: 'function', function: { name: 'task', description: 'Launch a sub-agent to handle a specific sub-task in parallel. Use for independent work that can run concurrently.', parameters: { type: 'object', properties: { description: { type: 'string' }, prompt: { type: 'string' } }, required: ['description', 'prompt'] } } },
   { type: 'function', function: { name: 'web_search', description: 'Search the web or crawl URLs directly. Pass a URL to fetch its content (deep-crawl for GitHub/Gitee repos with full file tree). Pass a search query for Bing+Sogou results. Use for documentation, API references, or anything you are unsure about.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Search query or URL to crawl' } }, required: ['query'] } } },
+  { type: 'function', function: { name: 'skill', description: 'Invoke a skill by name. Skills are specialized instruction guides that expand when called. Use this when a skill matches the user\'s intent.', parameters: { type: 'object', properties: { skill: { type: 'string', description: 'Skill name without leading slash. E.g. commit, review, plan' }, args: { type: 'string', description: 'Optional arguments for the skill' } }, required: ['skill'] } } },
 ]
 
 // MCP tools cache (loaded lazily)
@@ -138,6 +140,14 @@ async function executeTool(name, args, projectRoot) {
         if (!results.length) return `No results found for: ${args.query}`
         return formatSearchResults(results)
       }
+      case 'skill': {
+        const { getSkillBody } = require('./skills/skillLoader')
+        const skill = getSkillBody(root, args.skill)
+        if (!skill) return `[ERROR] Unknown skill: ${args.skill}`
+        let content = `Base directory for this skill: ${skill.dir}\n\n${skill.body}`
+        if (args.args) content = `Arguments: ${args.args}\n\n${content}`
+        return `[SKILL: /${args.skill}]\n\n${content}\n\n---\nFollow the skill instructions above.`
+      }
       default: return `Unknown tool: ${name}`
     }
   } catch (e) { return `Tool error: ${e.message}` }
@@ -172,6 +182,8 @@ async function executeToolWithHooks(name, args, projectPath, hooksConfig, permis
   let result
   if (name.startsWith('mcp__')) {
     result = await executeMcpTool(name, effectiveArgs, projectPath)
+  } else if (['fetch_url','weather','time','github','notion','sqlite','docker','amap'].includes(name)) {
+    result = await executeBuiltinTool(name, effectiveArgs)
   } else if (name === 'write_todos') {
     result = executeWriteTodos(effectiveArgs, projectPath)
   } else if (name === 'task') {
@@ -316,7 +328,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
   // ─── Load MCP tools ───
   let mcpTools = []
   try { mcpTools = await getMcpTools(projectPath) } catch {}
-  const allTools = [...BASE_TOOLS, ...mcpTools]
+  const allTools = [...BASE_TOOLS, ...BUILTIN_DEFS, ...mcpTools]
 
   // ─── Load hooks & permissions config ───
   const hooksConfigPath = path.join(projectPath, 'hooks-config.json')
@@ -439,7 +451,7 @@ async function executeCodeTask({ projectPath, task, apiKey, model = 'deepseek-v4
           response = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({ model, messages, tools: allTools, tool_choice: 'auto', max_tokens: 8192, temperature: 0.3, stream: true }),
+            body: JSON.stringify({ model, messages, tools: allTools, tool_choice: 'auto', max_tokens: 32768, temperature: 0.3, stream: true }),
             signal
           })
           break // success
