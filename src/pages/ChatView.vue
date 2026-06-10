@@ -1950,12 +1950,12 @@ For .pptx, use:
             type: 'function',
             function: {
               name: 'search_files',
-              description: '在用户电脑的所有磁盘（C: D: E: ...）上搜索文件。自动尝试精确匹配→大小写变体→空格/下划线/连字符变体→常见扩展名变体。找到文件后以原始格式返回（PNG就是PNG，不是txt）。当用户说"帮我找"、"有没有"、"找文件"时调用。找不到时诚实告知。',
+              description: '在电脑上搜索文件。按文件名关键词搜索。',
               parameters: {
                 type: 'object',
                 properties: {
-                  query: { type: 'string', description: '要搜索的完整文件名，如 "LoongProfile.png" 或 "fig_4_1_analyze.png"' },
-                  searchPath: { type: 'string', description: '限定搜索路径，默认全盘搜索（C: D: E: ...）' }
+                  query: { type: 'string', description: '搜索关键词（文件名包含）' },
+                  searchPath: { type: 'string', description: '搜索路径，默认用户主目录' }
                 }, required: ['query']
               }
             }
@@ -2856,14 +2856,7 @@ async function handleSearchFiles(args) {
   try {
     const data = await callComputerAPI('search-files', { query: args.query, searchPath: args.searchPath })
     if (data.error) return JSON.stringify({ status: 'error', error: data.error })
-    const results = data.results || []
-    if (results.length === 0) return JSON.stringify({ status: 'ok', count: 0, results: '未找到匹配文件' })
-    const list = results.map(r => {
-      const matchTag = r.matchType === 'variant' ? ' (变体匹配)' : r.matchType === 'fuzzy' ? ' (模糊匹配)' : ''
-      const sizeStr = r.sizeMB != null ? ` (${r.sizeMB}MB)` : r.size != null ? ` (${r.size} bytes)` : ''
-      if (r.url) return `📄 ${r.name}${sizeStr}${matchTag} - [查看/下载](${r.url})`
-      return `📄 ${r.name}${sizeStr}${matchTag} - 路径: ${r.path}`
-    }).join('\n')
+    const list = data.results.slice(0, 30).map(r => `${r.name} (${r.type === 'directory' ? '文件夹' : r.sizeMB + 'MB'}) - ${r.path}`).join('\n')
     return JSON.stringify({ status: 'ok', count: data.count, results: list })
   } catch (e) { return JSON.stringify({ status: 'error', error: e.message }) }
 }

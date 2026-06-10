@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════
 // MCP Client — Enhanced Model Context Protocol
 // Supports: stdio, SSE, HTTP transports
-// Config: .mcp.json, settings.json, .superds/settings.json
+// Config: .mcp.json, settings.json, .deepseek-super/settings.json
 // ═══════════════════════════════════════════
 
 const fs = require('fs')
@@ -11,7 +11,7 @@ const os = require('os')
 
 const _connections = {}
 const MCP_CONFIG_FILENAME = '.mcp.json'
-const DS_SETTINGS_DIR = '.superds'
+const DS_SETTINGS_DIR = '.deepseek-super'
 
 function loadMcpConfig(projectPath) {
   const servers = {}
@@ -26,7 +26,7 @@ function loadMcpConfig(projectPath) {
       } catch {}
     }
 
-    // Load from .superds/settings.json
+    // Load from .deepseek-super/settings.json
     const dsSettingsPath = path.join(projectPath, DS_SETTINGS_DIR, 'settings.json')
     if (fs.existsSync(dsSettingsPath)) {
       try {
@@ -107,7 +107,7 @@ async function connectStdioServer(name, config) {
     params: {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'superds', version: '1.0.0' },
+      clientInfo: { name: 'deepseek-super', version: '1.0.0' },
     },
   })
 

@@ -1,5 +1,5 @@
 // ══════════════════════════════════════
-// SuperDS Constants
+// DeepSeek-Super Constants
 // ══════════════════════════════════════
 
 module.exports = {

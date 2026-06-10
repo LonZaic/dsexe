@@ -1,5 +1,5 @@
 // ══════════════════════════════════════
-// SuperDS Express Application Factory
+// DeepSeek-Super Express Application Factory
 // Registers all middleware and routes
 // ══════════════════════════════════════
 

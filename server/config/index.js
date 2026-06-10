@@ -1,5 +1,5 @@
 // ══════════════════════════════════════
-// SuperDS Environment Configuration
+// DeepSeek-Super Environment Configuration
 // ══════════════════════════════════════
 
 const path = require('path')
@@ -26,7 +26,7 @@ function loadEnv(filePath) {
   }
 }
 
-// Load .env from project root (SuperDS\.env)
+// Load .env from project root (E:\DeepSeek-Super\.env)
 loadEnv(path.join(__dirname, '..', '..', '.env'))
 
 const config = {

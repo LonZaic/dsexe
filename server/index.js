@@ -1,11 +1,9 @@
 // ══════════════════════════════════════
-// SuperDS Server Entry Point
-// Starts Express API + WebSocket
-// OCR is handled browser-side via Tesseract.js
+// DeepSeek-Super Server Entry Point
+// Just starts the server — all setup is in app.js
 // ══════════════════════════════════════
 
 const http = require('http')
-const path = require('path')
 const createApp = require('./app')
 const config = require('./config')
 const logger = require('./config/logger')
@@ -30,7 +28,7 @@ setupWebSocket(server)
 
 // Start listening
 server.listen(config.port, () => {
-  logger.info(`SuperDS server running on http://localhost:${config.port}`)
+  logger.info(`DeepSeek-Super API server running on http://localhost:${config.port}`)
   logger.info(`WebSocket on ws://localhost:${config.port}/ws`)
   logger.info(`Environment: ${config.nodeEnv}`)
   logger.info(`Log level: ${config.logLevel}`)

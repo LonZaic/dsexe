@@ -1,5 +1,5 @@
 // ══════════════════════════════════════
-// SuperDS Logger
+// DeepSeek-Super Logger
 // Simple structured logger — no heavy dependencies
 // ══════════════════════════════════════
 

@@ -7,7 +7,7 @@
           <path d="M10 16h12M16 10v12M10 10l12 12M10 22l12-12" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round"/>
         </svg>
       </div>
-      <h1>SuperDS</h1>
+      <h1>DeepSeek-Super</h1>
       <p class="subtitle">{{ isRegister ? t('registerSub') : t('loginSub') }}</p>
       <div class="form">
         <input
