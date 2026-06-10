@@ -18,7 +18,7 @@ jobs:
       - name: 构建前端
         run: npm run build
       - name: 打包
-        run: npx electron-builder --win
+        run: npx electron-builder --win portable
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: 上传安装包
