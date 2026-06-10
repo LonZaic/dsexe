@@ -31,3 +31,8 @@ server/db/bbot.db*
 .vite-temp
 server/workspace/downloads/
 FIX_SUMMARY.md
+
+# Build artifacts
+build/
+release/
+*.zip

@@ -7,7 +7,7 @@ const { Router } = require('express')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { execFile } = require('child_process')
+const { execFile, execFileSync } = require('child_process')
 
 const router = Router()
 
@@ -170,50 +170,136 @@ router.post('/computer/analyze-disk', (req, res) => {
   }
 })
 
-// ─── Search files ───
+// ─── Search files (enhanced: multi-drive walk + variant matching + file URLs) ───
 router.post('/computer/search-files', (req, res) => {
   try {
     const { query, searchPath } = req.body
     if (!query) return res.status(400).json({ error: '请提供搜索关键词' })
-    const basePath = searchPath || os.homedir()
-    if (!fs.existsSync(basePath)) return res.status(404).json({ error: '搜索路径不存在' })
 
     const results = []
-    const lowerQ = query.toLowerCase()
+    const maxResults = 30
+    const seen = new Set()
+    const qLower = query.toLowerCase()
+    const qBaseName = query.replace(/\.[^.]+$/, '').toLowerCase()
 
-    function walk(dir, depth = 0) {
-      if (depth > 4 || results.length >= 100) return
+    // Determine search roots
+    let searchRoots = []
+    if (searchPath) {
+      searchRoots = [searchPath]
+    } else if (process.platform === 'win32') {
+      for (let c = 'A'.charCodeAt(0); c <= 'Z'.charCodeAt(0); c++) {
+        const drive = String.fromCharCode(c) + ':\\'
+        if (fs.existsSync(drive)) searchRoots.push(drive)
+      }
+    } else {
+      searchRoots = [os.homedir(), '/']
+    }
+
+    // Generate match patterns: exact + variants
+    const variants = generateSearchVariants(query)
+    const matchPatterns = [qLower, ...variants.map(v => v.toLowerCase())]
+
+    // Quick scan: root level first (catches E:\file.png style paths instantly)
+    for (const root of searchRoots) {
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true })
-        for (const entry of entries) {
-          const full = path.join(dir, entry.name)
-          if (entry.name.toLowerCase().includes(lowerQ)) {
-            try {
-              const stat = fs.statSync(full)
-              results.push({
-                path: full, name: entry.name,
-                type: entry.isDirectory() ? 'directory' : 'file',
-                size: stat.size, sizeMB: +(stat.size / 1048576).toFixed(2),
-                mtime: stat.mtime
-              })
-            } catch {
-              results.push({ path: full, name: entry.name, type: 'file', size: 0 })
-            }
-          }
-          if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
-            walk(full, depth + 1)
+        for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+          if (!entry.isFile()) continue
+          const nameLower = entry.name.toLowerCase()
+          if (nameLower === qLower || matchPatterns.includes(nameLower) || nameLower.includes(qBaseName)) {
+            const full = path.join(root, entry.name)
+            seen.add(full)
+            const stat = fs.statSync(full)
+            results.push({ path: full, name: entry.name, size: stat.size, matchType: nameLower === qLower ? 'exact' : 'fuzzy' })
           }
         }
       } catch {}
     }
-    walk(basePath)
 
-    results.sort((a, b) => (b.size || 0) - (a.size || 0))
-    res.json({ query, searchPath: basePath, count: results.length, results: results.slice(0, 100) })
+    // Deep walk (depth-limited for speed)
+    function walk(dir, depth = 0) {
+      if (depth > 4 || results.length >= maxResults) return
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (results.length >= maxResults) break
+          const full = path.join(dir, entry.name)
+          if (seen.has(full)) continue
+          seen.add(full)
+
+          if (entry.isDirectory()) {
+            const nameLower = entry.name.toLowerCase()
+            if (SKIP_DIRS.has(entry.name) || nameLower.includes('workspace') || full.includes('AppData\\Local\\Temp')) continue
+            walk(full, depth + 1)
+          } else {
+            const nameLower = entry.name.toLowerCase()
+            let matchType = null
+            if (nameLower === qLower) matchType = 'exact'
+            else if (matchPatterns.includes(nameLower)) matchType = 'variant'
+            else if (nameLower.includes(qBaseName)) matchType = 'fuzzy'
+
+            if (matchType) {
+              try {
+                const stat = fs.statSync(full)
+                results.push({ path: full, name: entry.name, size: stat.size, matchType })
+              } catch {
+                results.push({ path: full, name: entry.name, size: 0, matchType })
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    for (const root of searchRoots) {
+      if (fs.existsSync(root) && results.length < maxResults) walk(root)
+    }
+
+    // Copy found files to downloads for serving as real file cards
+    const DOWNLOADS_DIR = path.join(__dirname, '..', 'workspace', 'downloads')
+    if (!fs.existsSync(DOWNLOADS_DIR)) fs.mkdirSync(DOWNLOADS_DIR, { recursive: true })
+    const crypto = require('crypto')
+
+    for (const r of results) {
+      try {
+        const stat = fs.statSync(r.path)
+        r.sizeMB = +(stat.size / 1048576).toFixed(2)
+        if (stat.size <= 50 * 1024 * 1024) {
+          const safeName = r.name.replace(/\.\./g, '').replace(/[\\\/:*?"<>|]/g, '_').slice(0, 200)
+          const id = crypto.randomBytes(8).toString('hex')
+          const storedName = `${id}_${safeName}`
+          fs.copyFileSync(r.path, path.join(DOWNLOADS_DIR, storedName))
+          r.url = `/api/files/download/${encodeURIComponent(storedName)}`
+        }
+      } catch { r.sizeMB = 0 }
+    }
+
+    res.json({ query, count: results.length, results: results.slice(0, maxResults) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
 })
+
+// Generate file name variants for fuzzy search
+function generateSearchVariants(query) {
+  const variants = []
+  const name = query.replace(/\.[^.]+$/, '')
+  const ext = path.extname(query)
+
+  variants.push(query.toLowerCase())
+  variants.push(query.toUpperCase())
+  if (query[0]) variants.push(query[0].toUpperCase() + query.slice(1).toLowerCase())
+  variants.push(name.replace(/\s/g, '_') + ext)
+  variants.push(name.replace(/\s/g, '-') + ext)
+  variants.push(name.replace(/[_\s-]/g, '') + ext)
+  variants.push(name.replace(/\s/g, '') + ext)
+
+  const extLower = ext.toLowerCase()
+  if (extLower === '.png') { variants.push(name + '.jpg'); variants.push(name + '.jpeg'); variants.push(name + '.gif'); variants.push(name + '.webp') }
+  if (extLower === '.jpg' || extLower === '.jpeg') { variants.push(name + '.png'); variants.push(name + '.gif') }
+  if (extLower === '.txt') { variants.push(name + '.md'); variants.push(name + '.log') }
+
+  return [...new Set(variants.filter(v => v !== query))]
+}
 
 // ─── Delete file ───
 router.post('/computer/delete-file', (req, res) => {

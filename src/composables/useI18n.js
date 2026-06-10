@@ -21,7 +21,7 @@ const LANG_META = [
 const L = {
 
   // ── Brand & Nav ──
-  brand:           ['DeepSeek-Super', 'DeepSeek-Super', 'DeepSeek-Super', 'DeepSeek-Super'],
+  brand:           ['SuperDS', 'SuperDS', 'SuperDS', 'SuperDS'],
   home:            ['聊天', '聊天', '聊天', 'Chat'],
   code:            ['编程', '編程', '程式', 'Code'],
   newChat:         ['新对话', '新對話', '新對話', 'New Chat'],

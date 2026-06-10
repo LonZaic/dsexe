@@ -400,6 +400,7 @@ import { BASE_URL } from '../api/client.js'
 import { getApiHeaders } from '../utils/apiHeaders.js'
 import { useI18n } from '../composables/useI18n.js'
 import { getAgentPhrase } from '../utils/agentPhrases.js'
+import { ocrForContext } from '../utils/ocr.js'
 import TokenBar from '../components/common/TokenBar.vue'
 import hljs from 'highlight.js'
 window.hljs = hljs
@@ -1000,6 +1001,12 @@ async function processImages(files) {
     pendingImages.value = [...pendingImages.value, {
       name: f.name, type: f.type, size: f.size, key, data: dataUrl, content: dataUrl
     }]
+    // Start OCR in background — result available before send if fast enough
+    const ocrPromise = ocrForContext(dataUrl, f.name)
+    ocrPromise.then(ocrText => {
+      const idx = pendingImages.value.findIndex(p => p.key === key)
+      if (idx >= 0) pendingImages.value[idx].ocrText = ocrText
+    }).catch(() => {})
   }
 }
 
@@ -1014,12 +1021,12 @@ async function send() {
   store.tasks = []
   tokPrompt.value = 0; tokComp.value = 0; tokTotal.value = 0  // reset token counter
 
-  // Include images in task
+  // Include images in task (with OCR if available)
   const imgs = pendingImages.value
   let displayText = txt
-  if (imgs.length) {
-    const imgNames = imgs.map(i => i.name).join(', ')
-    displayText = txt + (txt ? '\n' : '') + `[图片: ${imgNames}]`
+  for (const img of imgs) {
+    const ocrText = img.ocrText || ''
+    displayText += ocrText ? `\n${ocrText}` : `\n[图片: ${img.name}]`
   }
   store.pushMessage({ _id: 'u_' + Date.now(), role: 'user', text: displayText, files: [...imgs] })
   store.addUserMessage(displayText)

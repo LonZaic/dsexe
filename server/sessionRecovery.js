@@ -7,7 +7,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const SESSIONS_DIR = path.join(os.homedir(), '.deepseek-super', 'sessions')
+const SESSIONS_DIR = path.join(os.homedir(), '.superds', 'sessions')
 
 function ensureSessionsDir() {
   if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true })

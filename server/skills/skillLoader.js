@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════
 // Skill Loader — CC-style SKILL.md loading
-// Scans .claude/skills/ + .deepseek-super/skills/
+// Scans .claude/skills/ + .superds/skills/
 // Supports: user, project, managed, bundled, MCP skills
 // ═══════════════════════════════════════════
 
@@ -8,13 +8,13 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const DS_SKILLS_DIR = '.deepseek-super/skills'
+const DS_SKILLS_DIR = '.superds/skills'
 const CLAUDE_SKILLS_DIR = '.claude/skills'
 
 function getSkillDirs(projectPath) {
   const dirs = []
   // Managed skills (highest priority from policy)
-  // User skills — both .deepseek-super and .claude paths
+  // User skills — both .superds and .claude paths
   dirs.push(path.join(os.homedir(), DS_SKILLS_DIR))
   dirs.push(path.join(os.homedir(), CLAUDE_SKILLS_DIR))
 

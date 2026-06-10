@@ -192,7 +192,7 @@ async function fetchUrl(args) {
     const timeout = setTimeout(() => controller.abort(), 15000)
 
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'DeepSeek-Super/1.0' },
+      headers: { 'User-Agent': 'SuperDS/1.0' },
       signal: controller.signal
     })
     clearTimeout(timeout)
@@ -345,7 +345,7 @@ async function githubTool(args) {
   const headers = {
     'Authorization': `Bearer ${token}`,
     'Accept': 'application/vnd.github.v3+json',
-    'User-Agent': 'DeepSeek-Super/1.0'
+    'User-Agent': 'SuperDS/1.0'
   }
 
   const api = 'https://api.github.com'
