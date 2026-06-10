@@ -15,6 +15,7 @@ function startServer() {
     // Set env before requiring server
     process.env.PORT = String(PORT)
     process.env.NODE_ENV = 'production'
+    process.env.DB_PATH = path.join(app.getPath('userData'), 'bbot.db')
 
     // Start the Express server
     require('../server/index.js')
