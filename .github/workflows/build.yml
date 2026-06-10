@@ -18,12 +18,14 @@ jobs:
       - name: 构建前端
         run: npm run build
       - name: 打包
-        run: npx electron-builder --win portable
+        run: npx electron-builder --dir
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: 上传安装包
+      - name: 压缩程序
+        run: cd release && 7z a -tzip ../SuperDS-Portable.zip win-unpacked
+      - name: 上传程序
         uses: actions/upload-artifact@v4
         with:
-          name: SuperDS-Setup
-          path: release/*.exe
+          name: SuperDS-Portable
+          path: SuperDS-Portable.zip
           if-no-files-found: error
